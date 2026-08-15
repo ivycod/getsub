@@ -1,0 +1,47 @@
+{
+  "summary": "Frontend-only short-viewport regression testing completed through the public URL. The main DeliveryChoiceModal fix passes on YouTube/Spotify flows and when mounted under both ProductPage and homepage App: at 1400x700 the card overflowed (850px scroll height vs 650px client height), real mouse-wheel input moved scrollTop 0→200, the background stayed fixed, and both pre-planned/recharge buttons were reachable. Homepage and product page wheel scrolling outside modals still works, anonymous login gating works, and a fresh signed-in preplanned checkout redirected successfully to /order/{token}. Two related modals remain broken when they overflow: SavingsModal and QuickViewModal have data-lenis-prevent but no scrollable container.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "SavingsModal",
+        "issue": "Still cannot scroll when content exceeds a short viewport. At 1400x500 the card extended from y=-156.5 to y=656.5; the close button was entirely above the viewport and the sign-in CTA extended below it. A real 700px wheel gesture left both overlay and card scrollTop at 0. At 1400x700 the modal also slightly overflowed/clipped its top. data-lenis-prevent stops Lenis interception, but neither the overlay nor modal card is natively scrollable.",
+        "selector": "[data-testid='savings-modal']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "QuickViewModal",
+        "issue": "Still cannot scroll when content exceeds a short viewport. It fits at 1400x700, but at 1400x500 the card extended from y=-68.3 to y=568.3; the close button was outside the viewport and the Choose plan action was partially clipped. A real wheel gesture left overlay/card scrollTop at 0, and a normal click on the clipped close button timed out as outside the viewport.",
+        "selector": "[data-testid='quickview-modal']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Make SavingsModal and QuickViewModal cards genuinely scrollable, for example by applying max-height: calc(100vh - 48px) and overflow-y: auto to their .modal-card containers while retaining data-lenis-prevent.",
+    "Retest both modals at 1400x500 and 1400x700 with real wheel input, verifying close/header and bottom CTA are reachable without moving the background page."
+  ],
+  "critical_code_review_comments": [
+    "data-lenis-prevent only tells Lenis not to consume nested wheel/touch input; it does not create native overflow. DeliveryChoiceModal passes because .choice-card already has max-height and overflow-y:auto. SavingsModal and QuickViewModal still inherit .modal-card { overflow:hidden } while .modal-overlay has overflow:visible and vertically centers an over-height child, producing clipped, unreachable content.",
+    "Production build succeeds, with the two pre-existing exhaustive-deps warnings in AdminPage.jsx and OrderPage.jsx; they were outside this targeted UI fix."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_9.json"
+  ],
+  "success_rate": {
+    "backend": "N/A (frontend-only request)",
+    "frontend": "60% (3/5 requested feature groups passed; DeliveryChoiceModal, outside page scrolling, and checkout passed; SavingsModal and QuickView overflow scrolling failed)"
+  },
+  "seed_data_creation": "Registered qa-scroll-iter9-20260815-1651@example.com through the UI and created one simulated YouTube Monthly preplanned order to verify the signed-in checkout redirect. They remain because the buyer UI exposes no delete operation.",
+  "test_credentials": "/app/memory/test_credentials.md was read before auth testing; a fresh buyer was registered as requested rather than guessing an existing password.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use a viewport no taller than 700px. DeliveryChoiceModal is verified fixed with real wheel input on both homepage App and ProductPage/useLenis contexts, and both delivery choices work. Focus the next retest on SavingsModal and QuickViewModal at 500px height; assert actual scrollTop changes and both top close and bottom CTA become reachable. Homepage and Spotify product page outside-modal wheel scrolling passed after allowing initial effects to settle.",
+  "rca_of_the_issue": "The Lenis exemption is correct and fixes DeliveryChoiceModal because that card was already a native scroll container. SavingsModal and QuickViewModal lack equivalent overflow CSS: .modal-card uses overflow:hidden with no viewport max-height, and .modal-overlay uses overflow:visible plus align-items:center. When a card is taller than the viewport, flex centering places its top above the viewport and its bottom below it, but there is no element whose scrollTop can change. Reproduction: open either modal, reduce viewport to 1400x500, place the mouse over the modal, wheel down; overlay/card scrollTop remain 0 and controls stay clipped."
+}

@@ -256,6 +256,7 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
     <motion.div
       className="modal-overlay"
       data-testid="savings-modal"
+      data-lenis-prevent
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -354,6 +355,7 @@ export const DeliveryChoiceModal = ({ product, plan, onSelect, onClose }) => {
     <motion.div
       className="modal-overlay"
       data-testid="delivery-choice-modal"
+      data-lenis-prevent
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

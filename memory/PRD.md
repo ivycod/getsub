@@ -27,7 +27,11 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
-## Implemented (Aug 2026 — hero pricing card update)
+## Implemented (Aug 2026 — Reviews & FAQ sections)
+- Added "Reviews" and "FAQ" nav links to the homepage header (alongside "How it works" and "Products").
+- New homepage Reviews section (`#reviews`): Trustpilot badge/link (placeholder until Trustpilot is connected) + 3 clearly-marked placeholder testimonial cards, ready to be swapped for real Trustpilot + manual reviews later.
+- New homepage FAQ section (`#faq`): combines the existing YouTube + Spotify product FAQs (grouped by product name) into one accordion, reusing the same accordion styling/behavior as the per-product FAQ.
+
 - Replaced hero pricing card's Spotify/YouTube tab toggle with a horizontal scrollable row of product logos (dynamically rendered from active products via ServiceIcon, so future products like Netflix/Grammarly show automatically).
 - Card now shows a single "From $X.XX / month" price (lowest `from_price` across active products) instead of a per-tab strikethrough price.
 - Primary action changed to a "See all plans" button linking to the in-page `#products` section, replacing the implicit tab-driven single-product flow.

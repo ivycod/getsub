@@ -259,6 +259,7 @@ section.block{ padding:80px 0; }
 
 /* FAQ */
 .faq{ max-width:720px; margin:0 auto; }
+.faq-group-title{ max-width:720px; margin:0 auto 8px; font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:700; color:var(--ink); }
 .faq-item{ border-bottom:1px solid var(--border); }
 .faq-q{ width:100%; display:flex; align-items:center; justify-content:space-between; padding:20px 4px; text-align:left; font-size:15px; font-weight:600; }
 .faq-icon{ font-size:20px; color:var(--muted); font-weight:400; transition:transform 0.2s ease; flex-shrink:0; margin-left:16px; }

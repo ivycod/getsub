@@ -9,6 +9,12 @@ import "@/styles/getsub.css";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+const PLACEHOLDER_REVIEWS = [
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+];
+
 const ROTATE_WORDS = ["YouTube", "Netflix", "Prime Video", "Grammarly", "chat GPT", "Canva"];
 
 const RotatingWord = () => {
@@ -239,6 +245,7 @@ const ComingSoonCard = ({ product, delay }) => {
 function App() {
   const [modalPlan, setModalPlan] = useState(null);
   const [quickView, setQuickView] = useState(null);
+  const [openFaq, setOpenFaq] = useState("0-0");
   const { data: products = [] } = useProducts();
   useLenis();
 
@@ -260,7 +267,7 @@ function App() {
 
   return (
     <>
-      <SiteHeader links={[{ href: "#how", label: "How it works" }]} />
+      <SiteHeader links={[{ href: "#how", label: "How it works" }, { href: "#reviews", label: "Reviews" }, { href: "#faq", label: "FAQ" }]} />
 
       <Hero activeProducts={activeProducts} />
 
@@ -337,6 +344,68 @@ function App() {
           </div>
         </div>
       </div>
+
+      <section className="block" id="reviews" data-testid="reviews-section">
+        <div className="wrap">
+          <Reveal className="block-head">
+            <span className="chapter">03 — Reviews</span>
+            <h2>What buyers say</h2>
+            <p>Real reviews go here once you have them — synced from Trustpilot and manual submissions.</p>
+          </Reveal>
+          <div className="hero-proof" style={{ justifyContent: "center", marginBottom: 28 }}>
+            <span className="tp-badge" data-testid="reviews-trustpilot-badge" title="Trustpilot reviews coming soon">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="#00B67A" aria-hidden="true"><path d="M12 1.5 14.8 9h7.7l-6.2 4.7 2.4 7.8L12 16.7l-6.7 4.8 2.4-7.8L1.5 9h7.7z"/></svg>
+              Review us on Trustpilot
+            </span>
+          </div>
+          <div className="testimonial-grid" data-testid="reviews-grid">
+            {PLACEHOLDER_REVIEWS.map((r, i) => (
+              <Reveal className="testimonial" key={i} delay={i * 0.08} data-testid={`review-card-${i}`}>
+                <div className="stars">★★★★★</div>
+                <p className="quote">"{r.quote}"</p>
+                <p className="who">{r.who}</p>
+              </Reveal>
+            ))}
+          </div>
+          <div className="placeholder-note-wrap"><span className="placeholder-note">These are placeholders — swapped for real Trustpilot + manual reviews once available.</span></div>
+        </div>
+      </section>
+
+      <section className="block" id="faq" data-testid="faq-section">
+        <div className="wrap">
+          <Reveal className="block-head">
+            <span className="chapter">04 — FAQ</span>
+            <h2>Frequently asked questions</h2>
+            <p>The same answers you'll find on each product page, all in one place.</p>
+          </Reveal>
+          {activeProducts.map((p, gi) => (
+            p.faqs?.length > 0 && (
+              <div key={p.slug} style={{ marginBottom: 32 }}>
+                <h3 className="faq-group-title" data-testid={`faq-group-${p.slug}`}>{p.name}</h3>
+                <div className="faq">
+                  {p.faqs.map((f, i) => {
+                    const key = `${gi}-${i}`;
+                    return (
+                      <div className={`faq-item ${openFaq === key ? "open" : ""}`} key={key}>
+                        <button className="faq-q" onClick={() => setOpenFaq(openFaq === key ? "" : key)} data-testid={`faq-${p.slug}-${i}`}>
+                          {f.q}<span className="faq-icon">+</span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {openFaq === key && (
+                            <motion.div className="faq-a" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+                              <div className="faq-a-inner">{f.a}</div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      </section>
 
       <Reveal className="footer-cta">
         <h2>Ready to stop overpaying?</h2>

@@ -9,6 +9,24 @@ import { DELIVERY_OPTIONS, money } from "@/data";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+export const Mascot = ({ pose = "wave", className = "", size, eager = false, alt = "getsub mascot waving hello" }) => (
+  <picture>
+    <source srcSet={`/mascot/mascot-${pose}.webp`} type="image/webp" />
+    <img
+      src={`/mascot/mascot-${pose}.png`}
+      alt={alt}
+      className={`mascot ${className}`}
+      width={size}
+      loading={eager ? "eager" : "lazy"}
+      fetchPriority={eager ? "high" : "auto"}
+      decoding={eager ? "sync" : "async"}
+      draggable="false"
+      data-testid={`mascot-${pose}`}
+    />
+  </picture>
+);
+
+
 export const useProducts = () =>
   useQuery({
     queryKey: ["products"],

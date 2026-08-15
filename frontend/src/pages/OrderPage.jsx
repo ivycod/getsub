@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
-import { SiteHeader, SiteFooter, ServiceIcon, productChip } from "@/components/Shared";
+import { SiteHeader, SiteFooter, ServiceIcon, productChip, Mascot } from "@/components/Shared";
 import { money } from "@/data";
 import "@/styles/getsub.css";
 
@@ -165,7 +165,7 @@ export default function OrderPage() {
     return (
       <>
         <SiteHeader />
-        <div className="order-page wrap"><p className="lead">Loading your order…</p></div>
+        <div className="order-page wrap"><div className="order-loading" data-testid="order-loading"><Mascot pose="idle" className="mascot-idle-loading" alt="getsub mascot loading your order" /><p className="lead">Loading your order…</p></div></div>
         <SiteFooter />
       </>
     );
@@ -184,7 +184,10 @@ export default function OrderPage() {
           <ServiceIcon service={order.service} color={order.product_color || "#0E6E56"} size={16} />
           {productName}
         </span>
-        <h1 className="order-title">Thanks — your order is in.</h1>
+        <div className="order-title-row">
+          <h1 className="order-title">Thanks — your order is in.</h1>
+          <Mascot pose="thumbsup" className="order-mascot" alt="getsub mascot giving a thumbs up" />
+        </div>
 
         <div className="order-summary" data-testid="order-summary">
           <div className="order-summary-row"><span>Plan</span><strong>{order.plan_name}{order.delivery_type === "shared" ? ` · ${order.months} months` : ""}</strong></div>

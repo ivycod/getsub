@@ -66,6 +66,14 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .link-plain{ font-size:15px; font-weight:500; color:var(--ink-soft); transition:color .2s ease; }
 .link-plain:hover{ color:var(--teal); }
 
+/* Hero mascot */
+.hero-mascot-wrap{ margin-top:34px; }
+.mascot{ display:block; height:auto; user-select:none; -webkit-user-drag:none; }
+.hero-mascot{ width:clamp(280px, 24vw, 350px); filter:drop-shadow(0 22px 30px rgba(18,33,29,0.16)); animation:mascotFloat 5s ease-in-out infinite; transform-origin:bottom center; }
+@keyframes mascotFloat{ 0%,100%{ transform:translateY(0) rotate(0deg); } 50%{ transform:translateY(-12px) rotate(-1.5deg); } }
+@media (prefers-reduced-motion: reduce){ .hero-mascot{ animation:none; } }
+
+
 /* Hero social proof */
 .hero-proof{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
 .proof-avatars{ display:flex; }
@@ -519,4 +527,28 @@ footer{ border-top:1px solid var(--border); padding:32px 0; }
   .compare-row{ grid-template-columns:1fr 0.8fr 0.8fr; }
   .hero h1{ font-size:34px; }
   .footer-cta{ margin:0 16px 48px; padding:40px 24px; }
+  .hero-mascot{ width:clamp(200px, 34vw, 260px); }
+  .hero-mascot-wrap{ margin-top:26px; }
 }
+
+/* Tablet: shrink mascot so it never crowds the headline */
+@media (min-width:861px) and (max-width:1080px){
+  .hero-mascot{ width:clamp(200px, 20vw, 260px); }
+  .hero-mascot-wrap{ margin-top:22px; }
+}
+
+/* Mobile: keep it below the CTA, shrink and center; hide on very small screens */
+@media (max-width:640px){
+  .hero-mascot-wrap{ margin-top:22px; text-align:center; }
+  .hero-mascot{ width:170px; margin:0 auto; }
+}
+@media (max-width:360px){
+  .hero-mascot-wrap{ display:none; }
+}
+
+/* Mascot reuse: order confirmation + loading */
+.order-title-row{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+.order-mascot{ width:88px; flex-shrink:0; animation:mascotFloat 5s ease-in-out infinite; }
+.order-loading{ display:flex; flex-direction:column; align-items:center; gap:14px; padding:56px 0; text-align:center; }
+.mascot-idle-loading{ width:150px; animation:mascotFloat 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce){ .order-mascot, .mascot-idle-loading{ animation:none; } }

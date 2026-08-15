@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion } from "framer-motion";
-import { Reveal, ServiceIcon, SiteHeader, SiteFooter, PlanModalFlow, useLenis, useProducts } from "@/components/Shared";
+import { Reveal, ServiceIcon, SiteHeader, SiteFooter, PlanModalFlow, useLenis, useProducts, Mascot } from "@/components/Shared";
 import { QuickViewModal } from "@/components/QuickViewModal";
 import { money } from "@/data";
 import "@/styles/getsub.css";
@@ -95,6 +95,9 @@ const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
             <a href="#products" className="btn-primary" data-testid="hero-cta">See products</a>
             <a href="#how" className="link-plain" data-testid="hero-how-link">How it works →</a>
           </motion.div>
+          <div className="hero-mascot-wrap">
+            <Mascot pose="wave" className="hero-mascot" eager alt="getsub mascot waving hello" />
+          </div>
         </div>
 
         <motion.div className="price-card" style={{ y: cardY }} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}>

@@ -27,7 +27,16 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
-## Implemented (Aug 2026 — Contact support widget)
+## Implemented (Aug 2026 — Buyer accounts, login-gated checkout, real live-chat tickets)
+- Fixed reported bug: admin previously could not reply to support tickets. Replaced the one-shot "leave a message" widget with a real ticket system (`tickets` + `ticket_messages` collections); admin Support tab is now a master-detail list with a reply box + open/resolved toggle per ticket.
+- Added buyer accounts: email+password (bcrypt via asyncio.to_thread, JWT access 15min/refresh 7day httpOnly cookies) AND Google sign-in (Emergent-managed OAuth, `/api/auth/google/session`), combined under one unified JWT session so `get_current_buyer` works the same regardless of login method.
+- Checkout now REQUIRES login (guest checkout removed) — `POST /api/orders` derives `buyer_email`/`user_id` from the authenticated buyer; SavingsModal shows a "Sign in to continue" gate (email/password + Google) when logged out.
+- New `/account` page (order history via `GET /api/my/orders`, logout); header shows Sign in / first-name link based on auth state.
+- Live chat support widget (floating button, hidden on `/admin`): logged-out users see a sign-in prompt; logged-in users get a real polling (3s) chat thread with admin.
+- Existing recharge-order chat (`/order/{token}` Gmail/OTP chat) is untouched and independent of the new ticket system.
+- Fixed post-testing: CORS_ORIGINS set to explicit frontend origin (was `*`) for correct credentialed cookies; AuthContext now retries `/api/auth/refresh` on 401 (both initial page load and a global axios interceptor for other buyer-facing calls) so sessions survive access-token expiry via the refresh cookie; duplicate-registration race now returns a clean 400 instead of 500.
+- Testing agent verified (2 rounds): full auth/checkout/ticket-reply/refresh-continuity/CORS flows passing (100% on final targeted re-check).
+
 - Added a floating "Contact support" button (bottom-right, every page except /admin) that opens a lightweight message form (email + message, no login required).
 - WhatsApp explicitly skipped per user request (removed from scope).
 - Live chat kept simple/no-login for now: user noted buyers will need accounts to open full tickets/chat, and that signup system will be built later — so this widget is a "leave a message, get an email reply" form, not a real-time chat, until accounts exist.

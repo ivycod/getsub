@@ -1,0 +1,34 @@
+{
+  "summary": "Targeted iteration-8 re-verification passed. Direct FastAPI OPTIONS and unauthenticated GET /api/auth/me return the exact preview origin plus Access-Control-Allow-Credentials:true. Backend pytest passed 5/5, including functional register/login after bcrypt offloading, simultaneous duplicate registration (one 200 and one clean 400), order/account persistence, and buyer/admin ticket smoke. Browser testing confirmed refresh-only session restoration, global non-auth buyer 401 refresh/retry, checkout/account history, and the complete buyer message -> admin reply/status toggle -> buyer polling round trip.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_fixes.py",
+    "/app/test_reports/pytest/backend_results_iteration8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The three requested fixes are present and behaved correctly: explicit CORS allow-origin with credentials, asyncio.to_thread around bcrypt hash/verify, DuplicateKeyError-to-400 handling, and refresh/retry logic in AuthContext.",
+    "Production build succeeds. Pre-existing exhaustive-deps warnings remain in AdminPage.jsx and OrderPage.jsx because useCallback dependency arrays omit headers; no failure was observed in the targeted flows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_fixes.py",
+    "/app/test_reports/iteration_8.json"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 targeted pytest cases)",
+    "frontend": "100% of requested targeted browser checks after correcting one overly strict test text selector"
+  },
+  "seed_data_creation": "Backend pytest created TEST/test-prefixed users, orders, tickets, and messages and cleaned them in teardown. Browser testing created qa_fix8_1786810764@example.com and qa_fix8_ticket_1786810804@example.com with one simulated order and two support tickets; all browser-created users and related orders/tickets/messages were deleted directly from the test MongoDB after verification.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All three iteration-7 fixes now pass. Direct localhost:8001 CORS is correct even though the public edge may independently alter preflight headers. In the browser, deleting only access_token and reloading produced /auth/me 401 -> /auth/refresh 200 -> /auth/me 200 while keeping the account header. Deleting access_token again without reload and opening support produced ticket 401 -> refresh 200 -> retried ticket 200, proving the global interceptor path. Admin Support detail/reply/resolve/reopen rendered without the prior useEffect crash, and buyer polling displayed the reply.",
+  "rca_of_the_issue": "Fix verification: CORS now reads the explicit CORS_ORIGINS value and Starlette emits the exact allow-origin plus credential header at the backend process. AuthContext explicitly refreshes after /auth/me 401 and its axios interceptor refreshes/retries other buyer 401s once while excluding auth/admin paths. Password CPU work is offloaded with asyncio.to_thread, and the unique-email insertion race is converted from DuplicateKeyError to the intended HTTP 400 response."
+}

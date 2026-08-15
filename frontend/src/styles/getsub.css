@@ -35,6 +35,8 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .nav-links a:hover::after{ width:100%; }
 .nav-cta{ background:var(--teal); color:#fff; padding:10px 20px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; transition:background .2s ease, transform .2s ease; }
 .nav-cta:hover{ background:var(--teal-dark); transform:translateY(-1px); }
+.nav-account-link{ font-size:14px; font-weight:600; color:var(--ink-soft); white-space:nowrap; transition:color .2s ease; }
+.nav-account-link:hover{ color:var(--teal-text); }
 
 /* Nav dropdown */
 .nav-drop{ position:relative; display:flex; align-items:center; }
@@ -420,6 +422,7 @@ footer{ border-top:1px solid var(--border); padding:32px 0; }
 .delivery-option strong{ display:block; font-size:14px; font-weight:700; margin-bottom:2px; }
 .delivery-option em{ display:block; font-size:12px; font-style:normal; color:var(--ink-soft); line-height:1.45; }
 .modal-email-label{ display:block; font-size:12px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; text-align:left; }
+.modal-signed-in-as{ font-size:13px; color:var(--ink-soft); text-align:center; margin-bottom:12px; }
 .modal-error{ font-size:13px; font-weight:600; color:#B4231F; background:#FDE7E7; border-radius:8px; padding:9px 12px; margin-bottom:10px; text-align:center; }
 
 /* ===== Delivery choice modal (two boxes) ===== */
@@ -542,6 +545,16 @@ footer{ border-top:1px solid var(--border); padding:32px 0; }
 .admin-login-shell{ display:flex; align-items:center; justify-content:center; padding:24px; }
 .admin-login-card{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:36px; width:100%; max-width:380px; text-align:center; }
 .admin-login-card h2{ font-size:22px; margin-bottom:18px; }
+.auth-tabs{ display:flex; gap:6px; background:var(--bg); border-radius:10px; padding:4px; margin-bottom:16px; }
+.auth-tab{ flex:1; text-align:center; padding:9px 6px; border-radius:8px; font-size:13px; font-weight:700; color:var(--ink-soft); transition:all .2s ease; }
+.auth-tab.active{ background:var(--ink); color:#fff; }
+.auth-divider{ display:flex; align-items:center; text-align:center; color:var(--muted); font-size:12px; margin:14px 0; }
+.auth-divider::before, .auth-divider::after{ content:""; flex:1; height:1px; background:var(--border); }
+.auth-divider span{ padding:0 10px; }
+.auth-google-btn{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-weight:600; font-size:14px; color:var(--ink); transition:border-color .2s ease, background .2s ease; }
+.auth-google-btn:hover{ border-color:var(--teal); background:var(--bg); }
+.auth-switch{ margin-top:16px; font-size:13px; color:var(--ink-soft); }
+.auth-switch button{ color:var(--teal-text); font-weight:700; text-decoration:underline; }
 .admin-topbar{ display:flex; align-items:center; gap:14px; padding:14px 24px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20; }
 .admin-topbar-title{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; }
 .admin-logout{ width:auto; margin:0 0 0 auto; padding:8px 16px; }
@@ -618,6 +631,9 @@ footer{ border-top:1px solid var(--border); padding:32px 0; }
 .support-textarea{ resize:vertical; font-family:inherit; }
 .support-sent{ text-align:center; padding:10px 0; }
 .support-sent p{ font-size:14px; color:var(--ink-soft); margin-bottom:16px; }
+.support-chat-box{ margin:-4px -4px 0; border:none; border-radius:0 0 16px 16px; }
+.support-chat-box .chat-messages{ height:280px; padding:14px; }
+.support-signin-prompt{ padding-top:4px; }
 @media (max-width:480px){
   .support-fab{ bottom:18px; right:18px; }
   .support-panel{ bottom:84px; right:16px; left:16px; width:auto; }

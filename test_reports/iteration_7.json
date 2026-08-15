@@ -1,0 +1,54 @@
+{
+  "summary": "Tested the new buyer auth, login-gated checkout/account history, live support tickets, admin reply/status UI, Google redirect construction, and unchanged order-token chat through the public URL. Backend pytest: 18/19 passed; the only failure is credentialed CORS preflight. The admin Support detail initially crashed because useEffect was not imported; this in-scope import error was fixed and the full buyer message -> admin reply -> buyer polling round-trip then passed within 8 seconds. One remaining frontend auth-session defect was reproduced: the UI never uses the valid refresh cookie after the 15-minute access cookie expires.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "OPTIONS /api/auth/me (and public /api preflights)",
+        "issue": "Credentialed CORS is misconfigured. Public preflight returns Access-Control-Allow-Origin: * and omits Access-Control-Allow-Credentials; backend CORS_ORIGINS is also '*'. This violates the explicit-origin credential requirement and will break cookie auth if frontend/API are served from different origins.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Buyer session refresh after access-token expiry",
+        "issue": "With a valid refresh_token cookie but a missing/expired access_token, reloading shows Sign in. AuthContext.checkAuth calls only /auth/me and sets user=false on 401; it never calls /auth/refresh. Buyers therefore lose UI session continuity after 15 minutes despite the intended 7-day refresh cookie, and in-flight support/order requests silently fail after expiry.",
+        "affected_selectors": ["[data-testid='nav-account-link']", "[data-testid='nav-signin-link']", "[data-testid='support-chat-send']", "[data-testid='modal-checkout']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/backend_results_iteration7.xml"
+  ],
+  "action_items": [
+    "Configure CORS_ORIGINS as an explicit comma-separated allowlist and ensure the public ingress preserves Access-Control-Allow-Credentials: true for credentialed preflights.",
+    "Add refresh handling in AuthContext/axios: on /auth/me or authenticated API 401, call /api/auth/refresh once, retry the original request, and only then mark the buyer logged out.",
+    "Keep the AdminProducts useEffect import fix; it is required for AdminTicketChat to render."
+  ],
+  "critical_code_review_comments": [
+    "SupportWidget, AdminTicketChat, and AccountPage swallow API failures without visible errors. A failed message can leave text in the field but gives no failure/retry feedback; account order fetch failure is indistinguishable from zero orders.",
+    "bcrypt.hashpw/checkpw run synchronously inside async FastAPI routes and can block the event loop under login attacks; move password hashing/verification to asyncio.to_thread or a bounded worker pool.",
+    "server.py is 938 lines and combines auth, products, orders, two chat systems, email, admin, and startup logic; split it into focused routers/services.",
+    "Registration uses find-then-insert against a unique email index without handling DuplicateKeyError, so concurrent same-email registrations can surface a 500 instead of the intended 400.",
+    "/app/memory/test_credentials.md is stale and still says guest checkout only; both requested auth-testing guideline files are missing. Update QA documentation for buyer account auth and cookie testing.",
+    "Production build succeeds but still reports exhaustive-deps warnings in AdminPage.jsx and OrderPage.jsx because callback dependency arrays omit headers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/frontend/src/pages/AdminProducts.jsx"
+  ],
+  "success_rate": {
+    "backend": "94.7% (18/19; one credentialed CORS failure)",
+    "frontend": "95% of final critical checks (admin live-chat crash fixed and retested; refresh-session continuity remains broken)"
+  },
+  "seed_data_creation": "Created TEST_-prefixed backend users/orders/tickets/messages during pytest and cleaned those records through the test teardown. UI testing created buyer qa_iter7_1786810214@example.com, one preplanned order, one support ticket, and buyer/admin chat messages; they remain because the product exposes no buyer/order deletion endpoint.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Core requested flows now pass through the public URL: register/login/duplicate and wrong-password errors; fifth-failure 429; secure HttpOnly cookies; login-gated checkout; derived buyer identity; account order list; isolated /my/orders; logged-out/live logged-in support widgets; Google redirect construction from login and checkout; admin ticket list/detail/reply/status; buyer polling sees admin reply within 8 seconds; legacy recharge order-token chat remains independent. Re-run backend_test.py after CORS changes and explicitly simulate an expired/missing access cookie while retaining refresh_token after refresh handling is added.",
+  "rca_of_the_issue": "Admin reply crash RCA: AdminProducts.jsx used useEffect in AdminTicketChat without importing it, producing ReferenceError only after selecting a ticket; importing useEffect fixed and retest passed. Refresh RCA: AuthContext exposes no refresh path/interceptor and checkAuth converts every /auth/me failure directly to guest state. CORS RCA: backend CORS_ORIGINS='*' and the public ingress answers OPTIONS with wildcard origin and no allow-credentials header."
+}

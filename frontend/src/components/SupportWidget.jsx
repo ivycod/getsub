@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -10,33 +12,62 @@ const ChatIcon = () => (
   </svg>
 );
 
+const LiveChatPanel = () => {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/api/tickets/mine/messages`, { withCredentials: true });
+      setMessages(data);
+    } catch { /* keep polling */ }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const send = async (e) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    setSending(true);
+    try {
+      const { data } = await axios.post(`${API}/api/tickets/mine/messages`, { text: t }, { withCredentials: true });
+      setMessages((m) => [...m, data]);
+      setText("");
+    } catch { /* keep text so buyer can retry */ }
+    setSending(false);
+  };
+
+  return (
+    <div className="chat-box support-chat-box" data-testid="support-chat-box">
+      <div className="chat-messages">
+        {messages.length === 0 && <p className="chat-empty">Send us a message and our team will reply here.</p>}
+        {messages.map((m) => (
+          <div key={m.id} className={`chat-bubble ${m.sender === "buyer" ? "mine" : "theirs"}`} data-testid={`support-chat-message-${m.sender}`}>
+            <span className="chat-sender">{m.sender === "buyer" ? "You" : "getsub support"}</span>
+            {m.text}
+            <span className="chat-time">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+          </div>
+        ))}
+      </div>
+      <form className="chat-input-row" onSubmit={send}>
+        <input className="chat-input" data-testid="support-chat-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" maxLength={2000} />
+        <button className="chat-send" data-testid="support-chat-send" type="submit" disabled={!text.trim() || sending}>Send</button>
+      </form>
+    </div>
+  );
+};
+
 export const SupportWidget = () => {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await axios.post(`${API}/api/support`, { email, message });
-      setSent(true);
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : Array.isArray(detail) ? detail[0]?.msg : "Something went wrong — try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reset = () => {
-    setOpen(false);
-    setTimeout(() => { setSent(false); setEmail(""); setMessage(""); setError(""); }, 300);
-  };
+  if (user == null) return null;
 
   return (
     <>
@@ -60,40 +91,17 @@ export const SupportWidget = () => {
           >
             <div className="support-panel-head">
               <strong>Contact support</strong>
-              <button className="support-panel-close" data-testid="support-panel-close" onClick={reset} aria-label="Close">×</button>
+              <button className="support-panel-close" data-testid="support-panel-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
             </div>
-            {sent ? (
-              <div className="support-sent" data-testid="support-sent">
-                <p>Thanks — we got your message and will reply by email shortly.</p>
-                <button className="modal-cta" onClick={reset} data-testid="support-sent-close">Close</button>
-              </div>
+            {user ? (
+              <LiveChatPanel />
             ) : (
-              <form onSubmit={submit} className="support-form">
-                <p className="support-panel-sub">Leave a message and we'll get back to you by email.</p>
-                <input
-                  type="email"
-                  required
-                  placeholder="you@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="cred-input"
-                  data-testid="support-email-input"
-                />
-                <textarea
-                  required
-                  placeholder="How can we help?"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  maxLength={2000}
-                  rows={4}
-                  className="cred-input support-textarea"
-                  data-testid="support-message-input"
-                />
-                {error && <p className="modal-error" data-testid="support-error">{error}</p>}
-                <button className="modal-cta" type="submit" disabled={loading} data-testid="support-submit">
-                  {loading ? "Sending…" : "Send message"}
-                </button>
-              </form>
+              <div className="support-signin-prompt" data-testid="support-signin-prompt">
+                <p className="support-panel-sub">Sign in to start a live chat with our support team — your conversation is saved to your account.</p>
+                <Link className="modal-cta" data-testid="support-signin-link" to={`/login?next=${encodeURIComponent(window.location.pathname)}`} onClick={() => setOpen(false)}>
+                  Sign in to chat
+                </Link>
+              </div>
             )}
           </motion.div>
         )}

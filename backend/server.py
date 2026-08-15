@@ -13,10 +13,13 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
 import jwt
+import bcrypt
+import httpx
 import resend
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
 
 mongo_url = os.environ['MONGO_URL']
@@ -29,6 +32,7 @@ api_router = APIRouter(prefix="/api")
 JWT_SECRET = os.environ['JWT_SECRET']
 ADMIN_PASSWORD = os.environ['ADMIN_PASSWORD']
 JWT_ALGORITHM = "HS256"
+EMERGENT_AUTH_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
 resend.api_key = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
@@ -181,7 +185,6 @@ class OrderCreate(BaseModel):
     plan_id: str
     delivery_type: Literal["preplanned", "recharge", "shared"]
     months: int = 1
-    buyer_email: EmailStr
 
 
 class CredentialsSubmit(BaseModel):
@@ -215,20 +218,34 @@ class NotifySignup(BaseModel):
 
 
 class SupportMessageCreate(BaseModel):
-    email: EmailStr
-    message: str = Field(min_length=1, max_length=2000)
+    text: str = Field(min_length=1, max_length=2000)
 
-    @field_validator("message")
+    @field_validator("text")
     @classmethod
-    def message_not_blank(cls, v: str) -> str:
+    def text_not_blank(cls, v: str) -> str:
         stripped = v.strip()
         if not stripped:
-            raise ValueError("message cannot be blank")
+            raise ValueError("text cannot be blank")
         return stripped
 
 
-class SupportStatusUpdate(BaseModel):
-    resolved: bool
+class TicketStatusUpdate(BaseModel):
+    status: Literal["open", "resolved"]
+
+
+class RegisterIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(min_length=1, max_length=80)
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class GoogleSessionIn(BaseModel):
+    session_id: str
 
 
 # ---------------- Admin auth ----------------
@@ -291,6 +308,162 @@ async def admin_me(admin: str = Depends(get_admin)):
     return {"role": "admin"}
 
 
+# ---------------- Buyer auth ----------------
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "role": "buyer", "type": "access",
+               "exp": datetime.now(timezone.utc) + timedelta(minutes=15)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "role": "buyer", "type": "refresh",
+               "exp": datetime.now(timezone.utc) + timedelta(days=7)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def set_auth_cookies(response: Response, user_id: str, email: str):
+    response.set_cookie("access_token", create_access_token(user_id, email), httponly=True, secure=True, samesite="none", max_age=900, path="/")
+    response.set_cookie("refresh_token", create_refresh_token(user_id), httponly=True, secure=True, samesite="none", max_age=604800, path="/")
+
+
+def clear_auth_cookies(response: Response):
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+
+
+def user_public(doc: dict) -> dict:
+    return {"user_id": doc["user_id"], "email": doc["email"], "name": doc.get("name", ""), "picture": doc.get("picture")}
+
+
+async def get_current_buyer(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access" or payload.get("role") != "buyer":
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@api_router.post("/auth/register")
+async def register(body: RegisterIn, response: Response, request: Request):
+    email = body.email.lower().strip()
+    ip = client_ip(request)
+    await check_brute_force(f"register:{ip}")
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    password_hash = await asyncio.to_thread(hash_password, body.password)
+    doc = {
+        "user_id": user_id, "email": email, "name": body.name.strip(),
+        "password_hash": password_hash, "picture": None, "created_at": now_iso(),
+    }
+    try:
+        await db.users.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+    set_auth_cookies(response, user_id, email)
+    return user_public(doc)
+
+
+@api_router.post("/auth/login")
+async def login(body: LoginIn, response: Response, request: Request):
+    email = body.email.lower().strip()
+    ip = client_ip(request)
+    identifier = f"login:{ip}:{email}"
+    await check_brute_force(identifier)
+    user = await db.users.find_one({"email": email})
+    valid = bool(user and user.get("password_hash")) and await asyncio.to_thread(verify_password, body.password, user["password_hash"])
+    if not valid:
+        rec = await db.login_attempts.find_one_and_update(
+            {"identifier": identifier},
+            {"$inc": {"count": 1}, "$set": {"last_attempt": now_iso()}},
+            upsert=True, return_document=True,
+        )
+        if rec and rec.get("count", 0) >= 5:
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    await db.login_attempts.delete_one({"identifier": identifier})
+    set_auth_cookies(response, user["user_id"], user["email"])
+    return user_public(user)
+
+
+@api_router.post("/auth/logout")
+async def logout(response: Response):
+    clear_auth_cookies(response)
+    return {"ok": True}
+
+
+@api_router.get("/auth/me")
+async def auth_me(user: dict = Depends(get_current_buyer)):
+    return user_public(user)
+
+
+@api_router.post("/auth/refresh")
+async def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh" or payload.get("role") != "buyer":
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    response.set_cookie("access_token", create_access_token(user["user_id"], user["email"]), httponly=True, secure=True, samesite="none", max_age=900, path="/")
+    return user_public(user)
+
+
+@api_router.post("/auth/google/session")
+async def google_session(body: GoogleSessionIn, response: Response):
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    async with httpx.AsyncClient(timeout=10) as http_client:
+        try:
+            r = await http_client.get(EMERGENT_AUTH_SESSION_URL, headers={"X-Session-ID": body.session_id})
+            r.raise_for_status()
+        except httpx.HTTPError:
+            raise HTTPException(status_code=401, detail="Could not verify Google session")
+    data = r.json()
+    email = data["email"].lower().strip()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        await db.users.update_one({"email": email}, {"$set": {"name": data.get("name", existing.get("name", "")), "picture": data.get("picture")}})
+        user_id = existing["user_id"]
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id, "email": email, "name": data.get("name", ""),
+            "password_hash": None, "picture": data.get("picture"), "created_at": now_iso(),
+        })
+    set_auth_cookies(response, user_id, email)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return user_public(user)
+
+
 # ---------------- Products ----------------
 def product_doc_from_input(body: ProductIn, existing: Optional[dict] = None) -> dict:
     doc = body.model_dump()
@@ -329,41 +502,100 @@ async def notify_signup(body: NotifySignup):
     return {"ok": True}
 
 
-@api_router.post("/support")
-async def create_support_message(body: SupportMessageCreate, request: Request):
-    doc = {
-        "id": str(uuid.uuid4()),
-        "email": body.email.lower().strip(),
-        "message": body.message,
-        "resolved": False,
-        "created_at": now_iso(),
-    }
-    await db.support_messages.insert_one({**doc})
-    if ADMIN_NOTIFY_EMAIL:
-        base = base_from_request(request)
+@api_router.get("/tickets/mine")
+async def get_my_ticket(user: dict = Depends(get_current_buyer)):
+    ticket = await db.tickets.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return ticket
+
+
+@api_router.get("/tickets/mine/messages")
+async def get_my_ticket_messages(user: dict = Depends(get_current_buyer)):
+    ticket = await db.tickets.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not ticket:
+        return []
+    return await db.ticket_messages.find({"ticket_id": ticket["id"]}, {"_id": 0}).sort("created_at", 1).to_list(500)
+
+
+async def notify_ticket(ticket: dict, recipient: str, text: str, base_url: str):
+    field = "last_notify_admin_at" if recipient == "admin" else "last_notify_buyer_at"
+    now = datetime.now(timezone.utc)
+    last = ticket.get(field)
+    if last:
+        try:
+            if now - datetime.fromisoformat(last) < CHAT_NOTIFY_THROTTLE:
+                return
+        except Exception:
+            pass
+    await db.tickets.update_one({"id": ticket["id"]}, {"$set": {field: now.isoformat()}})
+    snippet = (text[:140] + "…") if len(text) > 140 else text
+    if recipient == "admin":
+        if not ADMIN_NOTIFY_EMAIL:
+            return
         fire_email(
             ADMIN_NOTIFY_EMAIL,
-            "New support message",
+            f"\U0001F4AC New support ticket message — {ticket['buyer_email']}",
             email_shell(
                 "New support message",
-                f"<strong>{doc['email']}</strong> sent a support message:<br/><br/>\u201c{doc['message'][:280]}\u201d",
-                "Open admin panel", f"{base}/admin" if base else "",
+                f"<strong>{ticket['buyer_email']}</strong> sent a message:<br/><br/>\u201c{snippet}\u201d",
+                "Open admin panel", f"{base_url}/admin" if base_url else "",
             ),
         )
-    return {"ok": True}
+    else:
+        fire_email(
+            ticket["buyer_email"],
+            "\U0001F4AC getsub support replied",
+            email_shell(
+                "You've got a reply",
+                f"Our team just replied to your support message:<br/><br/>\u201c{snippet}\u201d",
+                "Open chat", base_url or "",
+            ),
+        )
 
 
-@api_router.get("/admin/support")
-async def list_support_messages(admin: str = Depends(get_admin)):
-    messages = await db.support_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return messages
+@api_router.post("/tickets/mine/messages")
+async def post_my_ticket_message(body: SupportMessageCreate, request: Request, user: dict = Depends(get_current_buyer)):
+    ticket = await db.tickets.find_one({"user_id": user["user_id"]})
+    if not ticket:
+        ticket = {
+            "id": str(uuid.uuid4()), "user_id": user["user_id"], "buyer_email": user["email"],
+            "status": "open", "last_message_at": None, "last_message_sender": None,
+            "last_notify_admin_at": None, "last_notify_buyer_at": None, "created_at": now_iso(),
+        }
+        await db.tickets.insert_one({**ticket})
+    msg = {"id": str(uuid.uuid4()), "ticket_id": ticket["id"], "sender": "buyer", "text": body.text, "created_at": now_iso()}
+    await db.ticket_messages.insert_one({**msg})
+    await db.tickets.update_one({"id": ticket["id"]}, {"$set": {"last_message_at": msg["created_at"], "last_message_sender": "buyer", "status": "open"}})
+    await notify_ticket(ticket, "admin", msg["text"], base_from_request(request))
+    return msg
 
 
-@api_router.patch("/admin/support/{message_id}")
-async def update_support_message(message_id: str, body: SupportStatusUpdate, admin: str = Depends(get_admin)):
-    res = await db.support_messages.update_one({"id": message_id}, {"$set": {"resolved": body.resolved}})
+@api_router.get("/admin/tickets")
+async def admin_list_tickets(admin: str = Depends(get_admin)):
+    return await db.tickets.find({}, {"_id": 0}).sort("last_message_at", -1).to_list(500)
+
+
+@api_router.get("/admin/tickets/{ticket_id}/messages")
+async def admin_get_ticket_messages(ticket_id: str, admin: str = Depends(get_admin)):
+    return await db.ticket_messages.find({"ticket_id": ticket_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+
+
+@api_router.post("/admin/tickets/{ticket_id}/messages")
+async def admin_post_ticket_message(ticket_id: str, body: SupportMessageCreate, request: Request, admin: str = Depends(get_admin)):
+    ticket = await db.tickets.find_one({"id": ticket_id})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    msg = {"id": str(uuid.uuid4()), "ticket_id": ticket_id, "sender": "admin", "text": body.text, "created_at": now_iso()}
+    await db.ticket_messages.insert_one({**msg})
+    await db.tickets.update_one({"id": ticket_id}, {"$set": {"last_message_at": msg["created_at"], "last_message_sender": "admin"}})
+    await notify_ticket(ticket, "buyer", msg["text"], base_from_request(request))
+    return msg
+
+
+@api_router.patch("/admin/tickets/{ticket_id}")
+async def admin_update_ticket(ticket_id: str, body: TicketStatusUpdate, admin: str = Depends(get_admin)):
+    res = await db.tickets.update_one({"id": ticket_id}, {"$set": {"status": body.status}})
     if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Support message not found")
+        raise HTTPException(status_code=404, detail="Ticket not found")
     return {"ok": True}
 
 
@@ -424,9 +656,7 @@ def buyer_order_view(order: dict) -> dict:
 
 
 @api_router.post("/orders")
-async def create_order(body: OrderCreate, request: Request):
-    if "@" not in body.buyer_email:
-        raise HTTPException(status_code=400, detail="Invalid email")
+async def create_order(body: OrderCreate, request: Request, user: dict = Depends(get_current_buyer)):
     product = await db.products.find_one({"plans.plan_id": body.plan_id})
     if not product:
         raise HTTPException(status_code=404, detail="Unknown plan")
@@ -447,13 +677,14 @@ async def create_order(body: OrderCreate, request: Request):
     order = {
         "id": str(uuid.uuid4()),
         "access_token": secrets.token_urlsafe(24),
+        "user_id": user["user_id"],
         "plan_id": body.plan_id,
         "plan_name": f"{product['name']} · {plan['name']}",
         "service": product["slug"],
         "product_color": product.get("color", "#0E6E56"),
         "delivery_type": delivery,
         "months": months,
-        "buyer_email": body.buyer_email.lower().strip(),
+        "buyer_email": user["email"],
         "price": round(plan["price"] * qty, 2),
         "official": round(plan["official"] * qty, 2),
         "status": "awaiting_credentials" if delivery == "recharge" else "processing",
@@ -502,6 +733,12 @@ async def find_order_by_token(access_token: str) -> dict:
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+@api_router.get("/my/orders")
+async def list_my_orders(user: dict = Depends(get_current_buyer)):
+    orders = await db.orders.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [buyer_order_view(o) for o in orders]
 
 
 @api_router.get("/orders/{access_token}")
@@ -686,11 +923,15 @@ SEED_PRODUCTS = [
 async def startup():
     await db.orders.create_index("access_token", unique=True)
     await db.orders.create_index("id", unique=True)
+    await db.orders.create_index("user_id")
     await db.messages.create_index([("order_id", 1), ("created_at", 1)])
     await db.login_attempts.create_index("identifier")
     await db.products.create_index("slug", unique=True)
     await db.notify_signups.create_index([("product_slug", 1), ("email", 1)], unique=True)
-    await db.support_messages.create_index("created_at")
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("user_id", unique=True)
+    await db.tickets.create_index("user_id", unique=True)
+    await db.ticket_messages.create_index([("ticket_id", 1), ("created_at", 1)])
     if await db.products.count_documents({}) == 0:
         for p in SEED_PRODUCTS:
             doc = {**p, "id": str(uuid.uuid4()), "created_at": now_iso(), "updated_at": now_iso()}

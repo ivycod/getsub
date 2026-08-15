@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Lenis from "lenis";
 import { openCheckout } from "@/paddle";
 import { DELIVERY_OPTIONS, money } from "@/data";
+import { useAuth } from "@/context/AuthContext";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -94,6 +95,7 @@ export const SiteHeader = ({ links }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
   const { data: products = [] } = useProducts();
+  const { user } = useAuth();
   const activeProducts = products.filter((p) => p.status === "active");
   const items = links || [{ href: "/#how", label: "How it works" }];
   const renderLink = (l, onClick) =>
@@ -127,6 +129,11 @@ export const SiteHeader = ({ links }) => {
             </AnimatePresence>
           </div>
         </nav>
+        {user ? (
+          <Link to="/account" className="nav-account-link" data-testid="nav-account-link">{user.name?.split(" ")[0] || "Account"}</Link>
+        ) : user === false ? (
+          <Link to="/login" className="nav-account-link" data-testid="nav-signin-link">Sign in</Link>
+        ) : <span />}
         <a href={items.find((l) => l.cta)?.href || "/#products"} className="nav-cta" data-testid="nav-get-started">Get started</a>
         <button className="menu-btn" data-testid="menu-toggle" aria-label="Open menu" onClick={() => setMobileOpen((v) => !v)}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -142,6 +149,11 @@ export const SiteHeader = ({ links }) => {
               {activeProducts.map((p) => (
                 <Link key={p.slug} to={`/${p.slug}`} onClick={() => setMobileOpen(false)}>{p.name}</Link>
               ))}
+              {user ? (
+                <Link to="/account" data-testid="mobile-account-link" onClick={() => setMobileOpen(false)}>My account</Link>
+              ) : user === false ? (
+                <Link to="/login" data-testid="mobile-signin-link" onClick={() => setMobileOpen(false)}>Sign in</Link>
+              ) : null}
             </div>
           </motion.div>
         )}
@@ -171,9 +183,9 @@ export const SiteFooter = () => (
 
 export const SavingsModal = ({ product, plan, months = 1, delivery = null, onChangeDelivery, onClose }) => {
   const navigate = useNavigate();
+  const { user, loginWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [buyerEmail, setBuyerEmail] = useState("");
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -190,12 +202,9 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
   const billing = isShared ? `One-time · ${months} months of access` : plan.billing;
   const chip = productChip(product.slug, product.color);
   const deliveryMeta = !isShared && delivery ? DELIVERY_OPTIONS[delivery] : null;
+  const nextPath = `${window.location.pathname}?plan=${plan.plan_id}`;
 
   const handleCheckout = async () => {
-    if (!buyerEmail.includes("@") || buyerEmail.length < 5) {
-      setError("Enter your email — we'll send your order link there.");
-      return;
-    }
     setLoading(true);
     setError("");
     const res = await openCheckout(plan.plan_id, qty);
@@ -205,8 +214,7 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
         plan_id: plan.plan_id,
         delivery_type: isShared ? "shared" : delivery || "preplanned",
         months: isShared ? months : 1,
-        buyer_email: buyerEmail,
-      });
+      }, { withCredentials: true });
       navigate(`/order/${data.access_token}`);
     } catch (e) {
       setError("Could not create your order. Please try again.");
@@ -276,22 +284,25 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
         )}
 
         <div className="modal-actions">
-          <label className="modal-email-label" htmlFor="buyer-email">Your email — order link & confirmation go here</label>
-          <input
-            id="buyer-email"
-            className="cred-input"
-            data-testid="modal-buyer-email"
-            type="email"
-            required
-            placeholder="you@email.com"
-            value={buyerEmail}
-            onChange={(e) => setBuyerEmail(e.target.value)}
-            style={{ marginBottom: 10 }}
-          />
-          {error && <p className="modal-error" data-testid="modal-error">{error}</p>}
-          <button className="modal-cta" data-testid="modal-checkout" onClick={handleCheckout} disabled={loading}>
-            {loading ? "Creating your order…" : "Continue with this plan"}
-          </button>
+          {user ? (
+            <>
+              <p className="modal-signed-in-as" data-testid="modal-signed-in-as">Signed in as <strong>{user.email}</strong></p>
+              {error && <p className="modal-error" data-testid="modal-error">{error}</p>}
+              <button className="modal-cta" data-testid="modal-checkout" onClick={handleCheckout} disabled={loading}>
+                {loading ? "Creating your order…" : "Continue with this plan"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="modal-signed-in-as" data-testid="modal-login-required">Sign in to complete your purchase — your orders and chats are saved to your account.</p>
+              <Link className="modal-cta" data-testid="modal-go-login" to={`/login?next=${encodeURIComponent(nextPath)}`} style={{ display: "block" }}>
+                Sign in to continue
+              </Link>
+              <button type="button" className="modal-share" data-testid="modal-google-login" onClick={() => loginWithGoogle(nextPath)} style={{ marginTop: 8 }}>
+                Continue with Google
+              </button>
+            </>
+          )}
           <p className="modal-fineprint">One-time payment · secure Paddle checkout · same-day activation</p>
         </div>
       </motion.div>

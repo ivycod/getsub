@@ -1,437 +1,384 @@
-"""Regression and edge-case API tests for the getsub storefront."""
+"""Public API regression tests for buyer auth, account orders, live support, and legacy order chat."""
 import os
 import uuid
-from pathlib import Path
+from datetime import datetime
 
 import pytest
 import requests
 from dotenv import dotenv_values
+from pymongo import MongoClient
 
 
 frontend_env = dotenv_values("/app/frontend/.env")
+backend_env = dotenv_values("/app/backend/.env")
 base_url = os.environ.get("REACT_APP_BACKEND_URL") or frontend_env.get("REACT_APP_BACKEND_URL")
 if not base_url:
-    raise RuntimeError("REACT_APP_BACKEND_URL is missing from the environment and frontend/.env")
+    raise RuntimeError("REACT_APP_BACKEND_URL is missing")
 BASE_URL = base_url.rstrip("/")
 API = f"{BASE_URL}/api"
-
-backend_env = dotenv_values("/app/backend/.env")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or backend_env.get("ADMIN_PASSWORD")
+RUN_ID = uuid.uuid4().hex[:10]
+TEST_USER_IDS = []
+TEST_ORDER_IDS = []
+TEST_TICKET_IDS = []
 
 
-@pytest.fixture(scope="session")
-def api_client():
+def new_session():
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     return session
 
 
-@pytest.fixture(scope="session")
-def run_id():
-    return uuid.uuid4().hex[:10]
-
-
-@pytest.fixture(scope="session")
-def admin_token(api_client):
-    if not ADMIN_PASSWORD:
-        pytest.skip("ADMIN_PASSWORD unavailable; /app/memory/test_credentials.md contains no usable credentials")
-    response = api_client.post(
-        f"{API}/admin/login",
-        json={"password": ADMIN_PASSWORD},
-        headers={"X-Forwarded-For": f"198.51.100.{uuid.uuid4().int % 200 + 1}"},
-    )
-    if response.status_code != 200:
-        pytest.fail(f"Admin authentication failed: {response.status_code} {response.text[:300]}")
-    token = response.json().get("token")
-    if not isinstance(token, str) or not token:
-        pytest.fail("Admin login response did not contain a non-empty token")
-    return token
-
-
-@pytest.fixture(scope="session")
-def admin_headers(admin_token):
-    return {"Authorization": f"Bearer {admin_token}"}
-
-
-@pytest.fixture(scope="session")
-def products(api_client):
-    response = api_client.get(f"{API}/products")
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-@pytest.fixture(scope="session")
-def plans(products):
-    return {
-        plan["plan_id"]: (product, plan)
-        for product in products
-        for plan in product.get("plans", [])
+def register_user(label="buyer", password="Test1234"):
+    session = new_session()
+    payload = {
+        "name": f"TEST {label.title()} User",
+        "email": f"TEST_{label}_{RUN_ID}_{uuid.uuid4().hex[:6]}@example.com".lower(),
+        "password": password,
     }
+    response = session.post(f"{API}/auth/register", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    TEST_USER_IDS.append(data["user_id"])
+    return session, payload, data, response
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_records():
+    yield
+    mongo_url = os.environ.get("MONGO_URL") or backend_env.get("MONGO_URL")
+    db_name = os.environ.get("DB_NAME") or backend_env.get("DB_NAME")
+    if not mongo_url or not db_name:
+        return
+    client = MongoClient(mongo_url)
+    db = client[db_name]
+    if TEST_TICKET_IDS:
+        db.ticket_messages.delete_many({"ticket_id": {"$in": TEST_TICKET_IDS}})
+        db.tickets.delete_many({"id": {"$in": TEST_TICKET_IDS}})
+    if TEST_ORDER_IDS:
+        db.messages.delete_many({"order_id": {"$in": TEST_ORDER_IDS}})
+        db.orders.delete_many({"id": {"$in": TEST_ORDER_IDS}})
+    if TEST_USER_IDS:
+        db.login_attempts.delete_many({"identifier": {"$regex": RUN_ID}})
+        db.users.delete_many({"user_id": {"$in": TEST_USER_IDS}})
+    client.close()
 
 
 @pytest.fixture(scope="session")
-def recharge_order(api_client, plans, run_id):
-    product, plan = plans["youtube-monthly"]
-    response = api_client.post(
+def buyer_account():
+    return register_user("primary")
+
+
+@pytest.fixture(scope="session")
+def buyer_session(buyer_account):
+    return buyer_account[0]
+
+
+@pytest.fixture(scope="session")
+def buyer_payload(buyer_account):
+    return buyer_account[1]
+
+
+@pytest.fixture(scope="session")
+def buyer_data(buyer_account):
+    return buyer_account[2]
+
+
+@pytest.fixture(scope="session")
+def admin_headers():
+    if not ADMIN_PASSWORD:
+        pytest.skip("Admin credentials are unavailable")
+    response = requests.post(f"{API}/admin/login", json={"password": ADMIN_PASSWORD}, timeout=20)
+    assert response.status_code == 200, response.text
+    token = response.json().get("token")
+    assert isinstance(token, str) and token
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="session")
+def youtube_plan():
+    response = requests.get(f"{API}/products/youtube", timeout=20)
+    assert response.status_code == 200, response.text
+    product = response.json()
+    plan = next(item for item in product["plans"] if item["plan_id"] == "youtube-monthly")
+    return product, plan
+
+
+@pytest.fixture(scope="session")
+def recharge_order(buyer_session, buyer_data, youtube_plan):
+    product, plan = youtube_plan
+    response = buyer_session.post(
         f"{API}/orders",
-        json={
-            "plan_id": plan["plan_id"],
-            "delivery_type": "recharge",
-            "months": 1,
-            "buyer_email": f"TEST_recharge_{run_id}@example.com",
-        },
+        json={"plan_id": plan["plan_id"], "delivery_type": "recharge", "months": 1},
     )
     assert response.status_code == 200, response.text
     order = response.json()
+    TEST_ORDER_IDS.append(order["id"])
+    assert order["user_id"] == buyer_data["user_id"]
+    assert order["buyer_email"] == buyer_data["email"]
     assert order["service"] == product["slug"]
     return order
 
 
-# Root and seeded product catalogue.
-class TestCatalogue:
-    def test_api_root(self, api_client):
-        response = api_client.get(f"{API}/")
-        assert response.status_code == 200
-        assert response.json() == {"message": "Hello World"}
+# Buyer registration, cookie sessions, login validation, refresh, logout, and lockout.
+class TestBuyerAuth:
+    def test_register_logs_in_and_sets_secure_httponly_cookies(self, buyer_account):
+        session, payload, data, response = buyer_account
+        assert data == {
+            "user_id": data["user_id"],
+            "email": payload["email"],
+            "name": payload["name"],
+            "picture": None,
+        }
+        set_cookie = response.headers.get("Set-Cookie", "").lower()
+        assert "access_token=" in set_cookie and "refresh_token=" in set_cookie
+        assert set_cookie.count("httponly") >= 2
+        assert set_cookie.count("secure") >= 2
+        assert set_cookie.count("samesite=none") >= 2
+        me = session.get(f"{API}/auth/me")
+        assert me.status_code == 200
+        assert me.json()["email"] == payload["email"]
 
-    def test_list_products_seeded_and_structured(self, products):
-        assert isinstance(products, list)
-        assert {p["slug"] for p in products} >= {"youtube", "spotify"}
-        for slug in ("youtube", "spotify"):
-            product = next(p for p in products if p["slug"] == slug)
-            assert product["status"] == "active"
-            assert isinstance(product["id"], str) and product["id"]
-            assert len(product["plans"]) == 3
-            assert {p["name"] for p in product["plans"]} == {"Monthly", "12 months", "Shared seat"}
-            assert len(product["perks"]) >= 4
-            assert len(product["faqs"]) >= 5
-            assert "_id" not in product
+    def test_password_hash_uses_bcrypt_2b(self, buyer_data):
+        mongo_url = os.environ.get("MONGO_URL") or backend_env.get("MONGO_URL")
+        db_name = os.environ.get("DB_NAME") or backend_env.get("DB_NAME")
+        client = MongoClient(mongo_url)
+        user = client[db_name].users.find_one({"user_id": buyer_data["user_id"]})
+        client.close()
+        assert isinstance(user["password_hash"], str)
+        assert user["password_hash"].startswith("$2b$")
 
-    @pytest.mark.parametrize("slug", ["youtube", "spotify"])
-    def test_get_seeded_product(self, api_client, slug):
-        response = api_client.get(f"{API}/products/{slug}")
-        assert response.status_code == 200
-        product = response.json()
-        assert product["slug"] == slug
-        assert product["status"] == "active"
-        assert all(isinstance(plan["price"], (int, float)) and plan["price"] > 0 for plan in product["plans"])
+    def test_duplicate_email_registration_is_clear_400(self, buyer_payload):
+        response = requests.post(f"{API}/auth/register", json=buyer_payload, timeout=20)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "An account with this email already exists"
 
-    def test_requested_domain_subs_product_route(self, api_client):
-        response = api_client.get(f"{API}/products/domain-subs")
-        assert response.status_code == 200, "Review request says /api/products/domain-subs works, but it did not"
-        assert response.json()["slug"] == "domain-subs"
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"name": "TEST Short", "email": f"short_{RUN_ID}@example.com", "password": "12345"},
+            {"name": "TEST Bad Email", "email": "not-an-email", "password": "Test1234"},
+        ],
+    )
+    def test_registration_validation(self, payload):
+        response = requests.post(f"{API}/auth/register", json=payload, timeout=20)
+        assert response.status_code == 422
+        assert isinstance(response.json().get("detail"), list)
 
-    def test_unknown_product_is_404(self, api_client):
-        response = api_client.get(f"{API}/products/TEST-does-not-exist")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Product not found"
-
-
-# Admin authentication, authorization, and brute-force lockout.
-class TestAdminAuth:
-    def test_wrong_password_is_rejected(self, api_client):
-        response = api_client.post(
-            f"{API}/admin/login",
-            json={"password": "TEST_definitely_wrong"},
-            headers={"X-Forwarded-For": "198.51.100.10"},
+    def test_email_password_sign_in(self, buyer_payload):
+        session = new_session()
+        response = session.post(
+            f"{API}/auth/login",
+            json={"email": buyer_payload["email"].upper(), "password": buyer_payload["password"]},
         )
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Wrong password"
+        assert response.status_code == 200, response.text
+        assert response.json()["email"] == buyer_payload["email"]
+        assert session.get(f"{API}/auth/me").status_code == 200
 
-    def test_fifth_failure_locks_ip(self, api_client):
-        ip = f"203.0.113.{uuid.uuid4().int % 200 + 1}"
+    def test_wrong_password_is_401_then_fifth_failure_is_429(self):
+        _, payload, _, _ = register_user("lockout")
         statuses = []
         for _ in range(5):
-            response = api_client.post(
-                f"{API}/admin/login",
-                json={"password": "TEST_wrong_for_lockout"},
-                headers={"X-Forwarded-For": ip},
+            response = requests.post(
+                f"{API}/auth/login",
+                json={"email": payload["email"], "password": "Wrong1234"},
+                timeout=20,
             )
             statuses.append(response.status_code)
+            if response.status_code == 401:
+                assert response.json()["detail"] == "Invalid email or password"
         assert statuses[:4] == [401, 401, 401, 401]
         assert statuses[4] == 429
         assert "15 minutes" in response.json()["detail"]
-        blocked = api_client.post(
-            f"{API}/admin/login",
-            json={"password": ADMIN_PASSWORD or "unavailable"},
-            headers={"X-Forwarded-For": ip},
-        )
-        assert blocked.status_code == 429
 
-    def test_admin_me_with_valid_jwt(self, api_client, admin_headers):
-        response = api_client.get(f"{API}/admin/me", headers=admin_headers)
-        assert response.status_code == 200
-        assert response.json() == {"role": "admin"}
+    def test_refresh_reissues_access_cookie(self, buyer_payload):
+        session = new_session()
+        login = session.post(f"{API}/auth/login", json={"email": buyer_payload["email"], "password": buyer_payload["password"]})
+        assert login.status_code == 200
+        for cookie in list(session.cookies):
+            if cookie.name == "access_token":
+                session.cookies.clear(cookie.domain, cookie.path, cookie.name)
+        assert session.get(f"{API}/auth/me").status_code == 401
+        refreshed = session.post(f"{API}/auth/refresh")
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["email"] == buyer_payload["email"]
+        assert session.get(f"{API}/auth/me").status_code == 200
 
-    @pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer invalid-token"}])
-    def test_admin_me_rejects_invalid_auth(self, api_client, headers):
-        response = api_client.get(f"{API}/admin/me", headers=headers)
-        assert response.status_code == 401
-        assert isinstance(response.json().get("detail"), str)
-
-
-# Notify capture and protected signup listing.
-class TestNotify:
-    def test_invalid_notify_email_rejected(self, api_client):
-        response = api_client.post(
-            f"{API}/notify", json={"product_slug": "youtube", "email": "not-an-email"}
-        )
-        assert response.status_code in (400, 422)
-        assert "detail" in response.json()
-
-    def test_notify_is_idempotent_and_admin_listed(self, api_client, admin_headers, run_id):
-        email = f"test_notify_{run_id}@example.com"
-        payload = {"product_slug": "youtube", "email": email.upper()}
-        first = api_client.post(f"{API}/notify", json=payload)
-        second = api_client.post(f"{API}/notify", json=payload)
-        assert first.status_code == second.status_code == 200
-        assert first.json() == second.json() == {"ok": True}
-        listed = api_client.get(f"{API}/admin/notify-signups", headers=admin_headers)
-        assert listed.status_code == 200
-        matches = [s for s in listed.json() if s["email"] == email]
-        assert len(matches) == 1
-        assert matches[0]["product_slug"] == "youtube"
-        assert "_id" not in matches[0]
-
-    def test_notify_list_requires_admin(self, api_client):
-        response = api_client.get(f"{API}/admin/notify-signups")
-        assert response.status_code == 401
-
-
-# Full admin product create/read/update/delete and validation.
-class TestAdminProductCRUD:
-    def test_create_update_delete_product_persists(self, api_client, admin_headers, run_id):
-        slug = f"test-product-{run_id}"
-        payload = {
-            "slug": slug,
-            "name": "TEST Product",
-            "status": "coming_soon",
-            "color": "#123456",
-            "tagline": "TEST tagline",
-            "hero_title": "TEST hero",
-            "brief": "TEST brief",
-            "from_price": 2.5,
-            "official_price": 9.5,
-            "highlights": ["TEST highlight"],
-            "perks": [{"t": "TEST perk", "d": "TEST description"}],
-            "faqs": [{"q": "TEST question?", "a": "TEST answer"}],
-            "plans": [{"name": "TEST Basic", "price": 2.5, "official": 9.5}],
-            "sort_order": 999,
-        }
-        product_id = None
-        try:
-            created_response = api_client.post(f"{API}/admin/products", json=payload, headers=admin_headers)
-            assert created_response.status_code == 200, created_response.text
-            created = created_response.json()
-            product_id = created["id"]
-            assert created["slug"] == slug
-            assert created["plans"][0]["plan_id"].startswith(f"{slug}-")
-            assert "_id" not in created
-
-            duplicate = api_client.post(f"{API}/admin/products", json=payload, headers=admin_headers)
-            assert duplicate.status_code == 400
-            assert duplicate.json()["detail"] == "Slug already exists"
-
-            fetched = api_client.get(f"{API}/products/{slug}")
-            assert fetched.status_code == 200
-            assert fetched.json()["name"] == "TEST Product"
-
-            payload["name"] = "TEST Product Updated"
-            payload["status"] = "active"
-            updated_response = api_client.put(
-                f"{API}/admin/products/{product_id}", json=payload, headers=admin_headers
-            )
-            assert updated_response.status_code == 200, updated_response.text
-            assert updated_response.json()["name"] == "TEST Product Updated"
-            persisted = api_client.get(f"{API}/products/{slug}")
-            assert persisted.status_code == 200
-            assert persisted.json()["name"] == "TEST Product Updated"
-            assert persisted.json()["status"] == "active"
-        finally:
-            if product_id:
-                deleted = api_client.delete(f"{API}/admin/products/{product_id}", headers=admin_headers)
-                assert deleted.status_code in (200, 404)
-                missing = api_client.get(f"{API}/products/{slug}")
-                assert missing.status_code == 404
-
-    def test_negative_plan_price_is_rejected(self, api_client, admin_headers, run_id):
-        slug = f"test-negative-{run_id}"
-        payload = {
-            "slug": slug,
-            "name": "TEST Negative Price",
-            "plans": [{"name": "Bad plan", "price": -5, "official": -10}],
-        }
-        response = api_client.post(f"{API}/admin/products", json=payload, headers=admin_headers)
-        if response.status_code == 200:
-            api_client.delete(f"{API}/admin/products/{response.json()['id']}", headers=admin_headers)
-        assert response.status_code == 422, "Negative prices must fail request validation"
-
-    def test_product_mutations_require_admin(self, api_client, run_id):
-        response = api_client.post(
-            f"{API}/admin/products",
-            json={"slug": f"test-noauth-{run_id}", "name": "TEST Unauthorized"},
-        )
-        assert response.status_code == 401
-
-
-# Simulated checkout order creation, persistence, validation, and redaction.
-class TestOrders:
-    def test_recharge_order_create_and_get(self, api_client, recharge_order, plans):
-        _, plan = plans["youtube-monthly"]
-        assert recharge_order["plan_id"] == plan["plan_id"]
-        assert recharge_order["delivery_type"] == "recharge"
-        assert recharge_order["months"] == 1
-        assert recharge_order["price"] == plan["price"]
-        assert recharge_order["official"] == plan["official"]
-        assert recharge_order["status"] == "awaiting_credentials"
-        assert recharge_order["payment_status"] == "simulated"
-        assert isinstance(recharge_order["access_token"], str) and len(recharge_order["access_token"]) >= 20
-        assert "account_password" not in recharge_order
-        fetched = api_client.get(f"{API}/orders/{recharge_order['access_token']}")
-        assert fetched.status_code == 200
-        assert fetched.json()["id"] == recharge_order["id"]
-        assert fetched.json()["credentials_submitted"] is False
-        assert "account_password" not in fetched.json()
-        assert "_id" not in fetched.json()
-
-    def test_shared_duration_and_total(self, api_client, plans, run_id):
-        _, plan = plans["spotify-shared"]
-        response = api_client.post(
-            f"{API}/orders",
-            json={
-                "plan_id": plan["plan_id"],
-                "delivery_type": "shared",
-                "months": 16,
-                "buyer_email": f"TEST_shared_{run_id}@example.com",
-            },
-        )
-        assert response.status_code == 200, response.text
-        order = response.json()
-        assert order["delivery_type"] == "shared"
-        assert order["months"] == 16
-        assert order["price"] == round(plan["price"] * 16, 2)
-        assert order["official"] == round(plan["official"] * 16, 2)
-        assert order["status"] == "processing"
-
-    @pytest.mark.parametrize(
-        "payload, expected",
-        [
-            ({"plan_id": "TEST_missing", "delivery_type": "preplanned", "months": 1, "buyer_email": "TEST_user@example.com"}, 404),
-            ({"plan_id": "youtube-monthly", "delivery_type": "shared", "months": 1, "buyer_email": "TEST_user@example.com"}, 400),
-            ({"plan_id": "youtube-shared", "delivery_type": "shared", "months": 2, "buyer_email": "TEST_user@example.com"}, 400),
-        ],
-    )
-    def test_invalid_order_options(self, api_client, payload, expected):
-        response = api_client.post(f"{API}/orders", json=payload)
-        assert response.status_code == expected
-        assert isinstance(response.json().get("detail"), str)
-
-    def test_malformed_buyer_email_is_rejected(self, api_client):
-        response = api_client.post(
-            f"{API}/orders",
-            json={
-                "plan_id": "youtube-monthly",
-                "delivery_type": "preplanned",
-                "months": 1,
-                "buyer_email": "TEST_invalid@",
-            },
-        )
-        assert response.status_code in (400, 422), "Malformed buyer email was accepted and an order was created"
-
-    def test_unknown_order_is_404(self, api_client):
-        response = api_client.get(f"{API}/orders/TEST_invalid_token")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Order not found"
-
-    def test_credentials_only_allowed_for_recharge(self, api_client, plans, run_id):
-        _, plan = plans["youtube-annual"]
-        created = api_client.post(
-            f"{API}/orders",
-            json={
-                "plan_id": plan["plan_id"],
-                "delivery_type": "preplanned",
-                "months": 1,
-                "buyer_email": f"TEST_preplanned_{run_id}@example.com",
-            },
-        )
-        assert created.status_code == 200
-        response = api_client.post(
-            f"{API}/orders/{created.json()['access_token']}/credentials",
-            json={"gmail": "TEST_user@gmail.com", "account_password": "TEST_password"},
-        )
-        assert response.status_code == 400
-        assert response.json()["detail"] == "This order does not need credentials"
-
-
-# Buyer/admin credentials, chat, and status integration.
-class TestRechargeWorkflow:
-    def test_submit_credentials_updates_status_without_buyer_password_leak(self, api_client, recharge_order):
-        token = recharge_order["access_token"]
-        response = api_client.post(
-            f"{API}/orders/{token}/credentials",
-            json={"gmail": "TEST_buyer@gmail.com", "account_password": "TEST_secret_password"},
-        )
+    def test_logout_clears_session(self, buyer_payload):
+        session = new_session()
+        assert session.post(f"{API}/auth/login", json={"email": buyer_payload["email"], "password": buyer_payload["password"]}).status_code == 200
+        response = session.post(f"{API}/auth/logout", json={})
         assert response.status_code == 200
         assert response.json() == {"ok": True}
-        fetched = api_client.get(f"{API}/orders/{token}")
-        assert fetched.status_code == 200
-        order = fetched.json()
-        assert order["gmail"] == "TEST_buyer@gmail.com"
-        assert order["credentials_submitted"] is True
-        assert order["status"] == "processing"
-        assert "account_password" not in order
+        assert session.get(f"{API}/auth/me").status_code == 401
 
-    def test_buyer_and_admin_chat_round_trip(self, api_client, admin_headers, recharge_order, run_id):
-        token = recharge_order["access_token"]
-        order_id = recharge_order["id"]
-        buyer_text = f"TEST buyer message {run_id}"
-        admin_text = f"TEST admin reply {run_id}"
-        buyer_post = api_client.post(f"{API}/orders/{token}/messages", json={"text": buyer_text})
-        assert buyer_post.status_code == 200
-        assert buyer_post.json()["sender"] == "buyer"
-        assert buyer_post.json()["text"] == buyer_text
-        admin_get = api_client.get(f"{API}/admin/orders/{order_id}/messages", headers=admin_headers)
-        assert admin_get.status_code == 200
-        assert any(m["text"] == buyer_text and m["sender"] == "buyer" for m in admin_get.json())
-        admin_post = api_client.post(
-            f"{API}/admin/orders/{order_id}/messages",
+    def test_fake_google_session_is_rejected(self):
+        response = requests.post(f"{API}/auth/google/session", json={"session_id": "TEST_invalid_session"}, timeout=20)
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Could not verify Google session"
+
+
+# Credentialed CORS and authenticated account order ownership.
+class TestAccountOrders:
+    def test_cors_preflight_supports_credentials_for_public_origin(self):
+        response = requests.options(
+            f"{API}/auth/me",
+            headers={
+                "Origin": BASE_URL,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "content-type",
+            },
+            timeout=20,
+        )
+        assert response.status_code in (200, 204)
+        assert response.headers.get("access-control-allow-credentials") == "true"
+        assert response.headers.get("access-control-allow-origin") == BASE_URL
+
+    def test_order_create_requires_login(self, youtube_plan):
+        _, plan = youtube_plan
+        response = requests.post(
+            f"{API}/orders",
+            json={"plan_id": plan["plan_id"], "delivery_type": "preplanned", "months": 1},
+            timeout=20,
+        )
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_authenticated_order_derives_buyer_and_persists(self, buyer_session, buyer_data, recharge_order):
+        assert recharge_order["buyer_email"] == buyer_data["email"]
+        assert recharge_order["user_id"] == buyer_data["user_id"]
+        assert "account_password" not in recharge_order and "_id" not in recharge_order
+        fetched = requests.get(f"{API}/orders/{recharge_order['access_token']}", timeout=20)
+        assert fetched.status_code == 200
+        assert fetched.json()["id"] == recharge_order["id"]
+        mine = buyer_session.get(f"{API}/my/orders")
+        assert mine.status_code == 200
+        match = next(order for order in mine.json() if order["id"] == recharge_order["id"])
+        assert match["buyer_email"] == buyer_data["email"]
+        assert match["access_token"] == recharge_order["access_token"]
+
+    def test_my_orders_is_auth_required_and_isolated(self, recharge_order):
+        assert requests.get(f"{API}/my/orders", timeout=20).status_code == 401
+        other_session, _, other_data, _ = register_user("isolated")
+        response = other_session.get(f"{API}/my/orders")
+        assert response.status_code == 200
+        assert all(order["user_id"] == other_data["user_id"] for order in response.json())
+        assert recharge_order["id"] not in {order["id"] for order in response.json()}
+
+
+# Buyer/admin support ticket round trip, status changes, and access control.
+class TestLiveSupportTickets:
+    def test_ticket_round_trip_and_status_toggle(self, buyer_session, buyer_data, admin_headers):
+        buyer_text = f"TEST buyer support {RUN_ID} {datetime.utcnow().isoformat()}"
+        admin_text = f"TEST admin support {RUN_ID}"
+        created = buyer_session.post(f"{API}/tickets/mine/messages", json={"text": buyer_text})
+        assert created.status_code == 200, created.text
+        buyer_message = created.json()
+        assert buyer_message["sender"] == "buyer" and buyer_message["text"] == buyer_text
+
+        ticket_response = buyer_session.get(f"{API}/tickets/mine")
+        assert ticket_response.status_code == 200
+        ticket = ticket_response.json()
+        TEST_TICKET_IDS.append(ticket["id"])
+        assert ticket["user_id"] == buyer_data["user_id"]
+        assert ticket["buyer_email"] == buyer_data["email"]
+        assert ticket["status"] == "open"
+
+        listed = requests.get(f"{API}/admin/tickets", headers=admin_headers, timeout=20)
+        assert listed.status_code == 200
+        listed_ticket = next(item for item in listed.json() if item["id"] == ticket["id"])
+        assert listed_ticket["last_message_sender"] == "buyer"
+
+        admin_history = requests.get(f"{API}/admin/tickets/{ticket['id']}/messages", headers=admin_headers, timeout=20)
+        assert admin_history.status_code == 200
+        assert any(msg["sender"] == "buyer" and msg["text"] == buyer_text for msg in admin_history.json())
+
+        replied = requests.post(
+            f"{API}/admin/tickets/{ticket['id']}/messages",
             json={"text": admin_text},
             headers=admin_headers,
+            timeout=20,
+        )
+        assert replied.status_code == 200, replied.text
+        assert replied.json()["sender"] == "admin" and replied.json()["text"] == admin_text
+
+        buyer_history = buyer_session.get(f"{API}/tickets/mine/messages")
+        assert buyer_history.status_code == 200
+        assert any(msg["sender"] == "admin" and msg["text"] == admin_text for msg in buyer_history.json())
+        assert all("_id" not in msg for msg in buyer_history.json())
+
+        resolved = requests.patch(
+            f"{API}/admin/tickets/{ticket['id']}",
+            json={"status": "resolved"},
+            headers=admin_headers,
+            timeout=20,
+        )
+        assert resolved.status_code == 200 and resolved.json() == {"ok": True}
+        assert buyer_session.get(f"{API}/tickets/mine").json()["status"] == "resolved"
+
+        reopened = requests.patch(
+            f"{API}/admin/tickets/{ticket['id']}",
+            json={"status": "open"},
+            headers=admin_headers,
+            timeout=20,
+        )
+        assert reopened.status_code == 200
+        assert buyer_session.get(f"{API}/tickets/mine").json()["status"] == "open"
+
+    def test_ticket_endpoints_require_correct_role(self, buyer_session, admin_headers):
+        assert requests.get(f"{API}/tickets/mine/messages", timeout=20).status_code == 401
+        assert requests.get(f"{API}/admin/tickets", timeout=20).status_code == 401
+        unknown = requests.post(
+            f"{API}/admin/tickets/TEST_missing/messages",
+            json={"text": "TEST hello"},
+            headers=admin_headers,
+            timeout=20,
+        )
+        assert unknown.status_code == 404
+        assert unknown.json()["detail"] == "Ticket not found"
+
+    def test_whitespace_support_message_is_rejected(self, buyer_session):
+        response = buyer_session.post(f"{API}/tickets/mine/messages", json={"text": "   "})
+        assert response.status_code == 422
+        assert isinstance(response.json().get("detail"), list)
+
+
+# Existing order-token credentials and chat remain separate from account support tickets.
+class TestLegacyOrderTokenChat:
+    def test_recharge_credentials_and_order_chat_still_work(self, buyer_session, recharge_order, admin_headers):
+        credentials = buyer_session.post(
+            f"{API}/orders/{recharge_order['access_token']}/credentials",
+            json={"gmail": f"TEST_{RUN_ID}@gmail.com", "account_password": "TEST_secret"},
+        )
+        assert credentials.status_code == 200
+        assert credentials.json() == {"ok": True}
+
+        buyer_text = f"TEST order OTP {RUN_ID}"
+        admin_text = f"TEST order reply {RUN_ID}"
+        buyer_post = requests.post(
+            f"{API}/orders/{recharge_order['access_token']}/messages",
+            json={"text": buyer_text},
+            timeout=20,
+        )
+        assert buyer_post.status_code == 200
+        assert buyer_post.json()["sender"] == "buyer"
+
+        admin_get = requests.get(
+            f"{API}/admin/orders/{recharge_order['id']}/messages",
+            headers=admin_headers,
+            timeout=20,
+        )
+        assert any(msg["text"] == buyer_text for msg in admin_get.json())
+        admin_post = requests.post(
+            f"{API}/admin/orders/{recharge_order['id']}/messages",
+            json={"text": admin_text},
+            headers=admin_headers,
+            timeout=20,
         )
         assert admin_post.status_code == 200
-        assert admin_post.json()["sender"] == "admin"
-        buyer_get = api_client.get(f"{API}/orders/{token}/messages")
-        assert buyer_get.status_code == 200
-        assert any(m["text"] == admin_text and m["sender"] == "admin" for m in buyer_get.json())
-        assert all("_id" not in message for message in buyer_get.json())
+        buyer_get = requests.get(f"{API}/orders/{recharge_order['access_token']}/messages", timeout=20)
+        assert any(msg["sender"] == "admin" and msg["text"] == admin_text for msg in buyer_get.json())
 
-    def test_whitespace_only_chat_is_rejected(self, api_client, recharge_order):
-        response = api_client.post(
-            f"{API}/orders/{recharge_order['access_token']}/messages", json={"text": "   "}
-        )
-        assert response.status_code == 422, "Whitespace-only messages must not be persisted"
-
-    def test_admin_lists_order_and_updates_status(self, api_client, admin_headers, recharge_order):
-        listed = api_client.get(f"{API}/admin/orders", headers=admin_headers)
-        assert listed.status_code == 200
-        order = next(o for o in listed.json() if o["id"] == recharge_order["id"])
-        assert order["buyer_email"] == recharge_order["buyer_email"]
-        assert "_id" not in order
-        updated = api_client.patch(
-            f"{API}/admin/orders/{recharge_order['id']}",
-            json={"status": "completed"},
-            headers=admin_headers,
-        )
-        assert updated.status_code == 200
-        assert updated.json() == {"ok": True}
-        persisted = api_client.get(f"{API}/orders/{recharge_order['access_token']}")
-        assert persisted.status_code == 200
-        assert persisted.json()["status"] == "completed"
-
-    def test_admin_order_endpoints_require_auth(self, api_client, recharge_order):
-        listed = api_client.get(f"{API}/admin/orders")
-        patched = api_client.patch(
-            f"{API}/admin/orders/{recharge_order['id']}", json={"status": "processing"}
-        )
-        assert listed.status_code == 401
-        assert patched.status_code == 401
+    def test_old_support_endpoints_are_removed(self):
+        assert requests.get(f"{API}/support", timeout=20).status_code in (404, 405)
+        assert requests.get(f"{API}/admin/support", timeout=20).status_code in (404, 405)

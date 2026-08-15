@@ -52,7 +52,7 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .hero::before{ width:420px; height:420px; background:var(--teal-tint); top:-160px; right:-140px; }
 .hero::after{ width:300px; height:300px; background:var(--amber-tint); bottom:-140px; left:-100px; }
 .hero .wrap{ position:relative; z-index:1; }
-.hero-grid{ display:grid; grid-template-columns:1.05fr 0.95fr; gap:56px; align-items:center; }
+.hero-grid{ display:grid; grid-template-columns:1.05fr 0.95fr; gap:56px; align-items:start; }
 .eyebrow{ display:inline-flex; align-items:center; gap:6px; background:var(--teal-tint); color:var(--teal-text); font-size:13px; font-weight:600; padding:6px 12px; border-radius:100px; margin-bottom:20px; }
 .hero h1{ font-size:48px; line-height:1.1; margin-bottom:18px; }
 .line-mask{ display:block; overflow:hidden; }
@@ -67,9 +67,29 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .link-plain:hover{ color:var(--teal); }
 
 /* Hero mascot */
-.hero-mascot-wrap{ margin-top:34px; }
+.hero-mascot-area{ display:flex; align-items:center; gap:2px; margin-top:30px; }
+.hero-mascot-wrap{ flex-shrink:0; }
 .mascot{ display:block; height:auto; user-select:none; -webkit-user-drag:none; }
-.hero-mascot{ width:clamp(280px, 24vw, 350px); filter:drop-shadow(0 22px 30px rgba(18,33,29,0.16)); transform-origin:60% 90%; animation:heroWave 1.5s ease-in-out 0.35s both, mascotFloat 5s ease-in-out 1.85s infinite; }
+.hero-mascot{ width:clamp(240px, 22vw, 320px); filter:drop-shadow(0 22px 30px rgba(18,33,29,0.16)); transform-origin:60% 90%; animation:heroWave 1.5s ease-in-out 0.35s both, mascotFloat 5s ease-in-out 1.85s infinite; }
+
+/* Splitzy speech bubble */
+.mascot-bubble{ position:relative; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 17px; font-size:14px; line-height:1.45; color:var(--ink-soft); max-width:220px; box-shadow:0 16px 34px -20px rgba(18,33,29,0.4); }
+.mascot-bubble-name{ font-weight:700; color:var(--teal); }
+.mascot-bubble::before{ content:""; position:absolute; left:-9px; top:50%; transform:translateY(-50%); border-width:9px 9px 9px 0; border-style:solid; border-color:transparent var(--border) transparent transparent; }
+.mascot-bubble::after{ content:""; position:absolute; left:-8px; top:50%; transform:translateY(-50%); border-width:8px 8px 8px 0; border-style:solid; border-color:transparent var(--surface) transparent transparent; }
+
+/* Hero mini feature row */
+.hero-mini-features{ display:flex; flex-wrap:wrap; align-items:center; gap:10px 24px; margin-top:28px; padding-top:18px; border-top:1px solid var(--border); }
+.mini-feat{ display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--ink-soft); }
+.mini-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.mini-dot-teal{ background:var(--teal); }
+.mini-dot-amber{ background:var(--amber); }
+.mini-dot-blue{ background:#1D4E9E; }
+
+/* Hero right column: badge chip + card, aligned top-right */
+.hero-right{ justify-self:end; width:100%; max-width:400px; display:flex; flex-direction:column; }
+.price-chip{ align-self:center; display:inline-flex; align-items:center; gap:6px; background:var(--ink); color:#fff; font-size:12px; font-weight:700; letter-spacing:0.01em; padding:8px 15px; border-radius:100px; margin-bottom:14px; box-shadow:0 12px 26px -16px rgba(18,33,29,0.6); }
+.price-chip-star{ color:var(--amber); font-size:13px; }
 @keyframes heroWave{
   0%{ transform:rotate(0deg); }
   12%{ transform:rotate(-11deg); }
@@ -538,19 +558,26 @@ footer{ border-top:1px solid var(--border); padding:32px 0; }
   .hero h1{ font-size:34px; }
   .footer-cta{ margin:0 16px 48px; padding:40px 24px; }
   .hero-mascot{ width:clamp(200px, 34vw, 260px); }
-  .hero-mascot-wrap{ margin-top:26px; }
+  /* Price card stacks below hero content */
+  .hero-right{ max-width:none; justify-self:stretch; margin-top:36px; }
+  .price-chip{ align-self:center; }
 }
 
 /* Tablet: shrink mascot so it never crowds the headline */
 @media (min-width:861px) and (max-width:1080px){
-  .hero-mascot{ width:clamp(200px, 20vw, 260px); }
-  .hero-mascot-wrap{ margin-top:22px; }
+  .hero-mascot{ width:clamp(190px, 19vw, 240px); }
+  .mascot-bubble{ max-width:190px; font-size:13px; padding:11px 14px; }
+  .hero-mini-features{ gap:8px 16px; }
 }
 
-/* Mobile: keep it below the CTA, shrink and center; hide on very small screens */
+/* Mobile: stack mascot + bubble vertically so they never overlap the feature row */
 @media (max-width:640px){
-  .hero-mascot-wrap{ margin-top:22px; text-align:center; }
-  .hero-mascot{ width:170px; margin:0 auto; }
+  .hero-mascot-area{ flex-direction:column; align-items:center; text-align:center; gap:16px; margin-top:26px; }
+  .hero-mascot{ width:180px; margin:0 auto; }
+  .mascot-bubble{ max-width:300px; }
+  .mascot-bubble::before{ left:50%; top:-9px; transform:translateX(-50%); border-width:0 9px 9px 9px; border-color:transparent transparent var(--border) transparent; }
+  .mascot-bubble::after{ left:50%; top:-8px; transform:translateX(-50%); border-width:0 8px 8px 8px; border-color:transparent transparent var(--surface) transparent; }
+  .hero-mini-features{ justify-content:center; }
 }
 @media (max-width:360px){
   .hero-mascot-wrap{ display:none; }

@@ -95,28 +95,41 @@ const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
             <a href="#products" className="btn-primary" data-testid="hero-cta">See products</a>
             <a href="#how" className="link-plain" data-testid="hero-how-link">How it works →</a>
           </motion.div>
-          <div className="hero-mascot-wrap">
-            <Mascot pose="wave" className="hero-mascot" eager alt="getsub mascot waving hello" />
+          <div className="hero-mascot-area">
+            <div className="hero-mascot-wrap">
+              <Mascot pose="wave" className="hero-mascot" eager alt="getsub mascot waving hello" />
+            </div>
+            <div className="mascot-bubble" data-testid="mascot-bubble">
+              <span className="mascot-bubble-name">Hey, I'm Splitzy</span> — I split the bill, not the vibe.
+            </div>
+          </div>
+          <div className="hero-mini-features" data-testid="hero-mini-features">
+            <span className="mini-feat"><span className="mini-dot mini-dot-teal" />No auto-renewal</span>
+            <span className="mini-feat"><span className="mini-dot mini-dot-amber" />Same-day activation</span>
+            <span className="mini-feat"><span className="mini-dot mini-dot-blue" />Human support</span>
           </div>
         </div>
 
-        <motion.div className="price-card" style={{ y: cardY }} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-          <div className="tabs">
-            {["spotify", "youtube"].map((s) => (
-              <button key={s} className={`tab ${heroTab === s ? "active" : ""}`} onClick={() => setHeroTab(s)} data-testid={`hero-tab-${s}`}>
-                {s === "spotify" ? "Spotify" : "YouTube"}
-              </button>
-            ))}
-          </div>
-          <div className="bridge">
-            <span className="price-old">{heroPrice.old}</span>
-            <span className="arrow">→</span>
-            <span className="price-new">{heroPrice.new}</span>
-          </div>
-          <p className="price-sub">per month · from</p>
-          <div className="seats"><span className="seats-dot" /> 2 seats left on this cycle</div>
-          <PayRow />
-        </motion.div>
+        <div className="hero-right">
+          <div className="price-chip" data-testid="price-chip"><span className="price-chip-star">★</span> 4.8 · 241+ happy subscribers</div>
+          <motion.div className="price-card" style={{ y: cardY }} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <div className="tabs">
+              {["spotify", "youtube"].map((s) => (
+                <button key={s} className={`tab ${heroTab === s ? "active" : ""}`} onClick={() => setHeroTab(s)} data-testid={`hero-tab-${s}`}>
+                  {s === "spotify" ? "Spotify" : "YouTube"}
+                </button>
+              ))}
+            </div>
+            <div className="bridge">
+              <span className="price-old">{heroPrice.old}</span>
+              <span className="arrow">→</span>
+              <span className="price-new">{heroPrice.new}</span>
+            </div>
+            <p className="price-sub">per month · from</p>
+            <div className="seats"><span className="seats-dot" /> 2 seats left on this cycle</div>
+            <PayRow />
+          </motion.div>
+        </div>
       </div>
     </section>
   );

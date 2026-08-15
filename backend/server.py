@@ -214,6 +214,23 @@ class NotifySignup(BaseModel):
     email: str = Field(min_length=5, max_length=120)
 
 
+class SupportMessageCreate(BaseModel):
+    email: EmailStr
+    message: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def message_not_blank(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("message cannot be blank")
+        return stripped
+
+
+class SupportStatusUpdate(BaseModel):
+    resolved: bool
+
+
 # ---------------- Admin auth ----------------
 def client_ip(request: Request) -> str:
     fwd = request.headers.get("X-Forwarded-For", "")
@@ -309,6 +326,44 @@ async def notify_signup(body: NotifySignup):
         {"$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now_iso()}},
         upsert=True,
     )
+    return {"ok": True}
+
+
+@api_router.post("/support")
+async def create_support_message(body: SupportMessageCreate, request: Request):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": body.email.lower().strip(),
+        "message": body.message,
+        "resolved": False,
+        "created_at": now_iso(),
+    }
+    await db.support_messages.insert_one({**doc})
+    if ADMIN_NOTIFY_EMAIL:
+        base = base_from_request(request)
+        fire_email(
+            ADMIN_NOTIFY_EMAIL,
+            "New support message",
+            email_shell(
+                "New support message",
+                f"<strong>{doc['email']}</strong> sent a support message:<br/><br/>\u201c{doc['message'][:280]}\u201d",
+                "Open admin panel", f"{base}/admin" if base else "",
+            ),
+        )
+    return {"ok": True}
+
+
+@api_router.get("/admin/support")
+async def list_support_messages(admin: str = Depends(get_admin)):
+    messages = await db.support_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return messages
+
+
+@api_router.patch("/admin/support/{message_id}")
+async def update_support_message(message_id: str, body: SupportStatusUpdate, admin: str = Depends(get_admin)):
+    res = await db.support_messages.update_one({"id": message_id}, {"$set": {"resolved": body.resolved}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Support message not found")
     return {"ok": True}
 
 
@@ -635,6 +690,7 @@ async def startup():
     await db.login_attempts.create_index("identifier")
     await db.products.create_index("slug", unique=True)
     await db.notify_signups.create_index([("product_slug", 1), ("email", 1)], unique=True)
+    await db.support_messages.create_index("created_at")
     if await db.products.count_documents({}) == 0:
         for p in SEED_PRODUCTS:
             doc = {**p, "id": str(uuid.uuid4()), "created_at": now_iso(), "updated_at": now_iso()}

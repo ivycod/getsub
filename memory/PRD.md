@@ -27,7 +27,13 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
-## Implemented (Aug 2026 — Reviews & FAQ sections)
+## Implemented (Aug 2026 — Contact support widget)
+- Added a floating "Contact support" button (bottom-right, every page except /admin) that opens a lightweight message form (email + message, no login required).
+- WhatsApp explicitly skipped per user request (removed from scope).
+- Live chat kept simple/no-login for now: user noted buyers will need accounts to open full tickets/chat, and that signup system will be built later — so this widget is a "leave a message, get an email reply" form, not a real-time chat, until accounts exist.
+- Backend: POST /api/support (public, EmailStr + non-blank message validation), GET/PATCH /api/admin/support (admin, list + mark resolved/reopen), best-effort admin email notification (no-op while RESEND_API_KEY is blank).
+- New "Support" tab in /admin lists all messages with Open/Resolved status toggle.
+
 - Added "Reviews" and "FAQ" nav links to the homepage header (alongside "How it works" and "Products").
 - New homepage Reviews section (`#reviews`): Trustpilot badge/link (placeholder until Trustpilot is connected) + 3 clearly-marked placeholder testimonial cards, ready to be swapped for real Trustpilot + manual reviews later.
 - New homepage FAQ section (`#faq`): combines the existing YouTube + Spotify product FAQs (grouped by product name) into one accordion, reusing the same accordion styling/behavior as the per-product FAQ.

@@ -247,3 +247,46 @@ export const AdminSignups = ({ headers, onAuthFail }) => {
     </div>
   );
 };
+
+export const AdminSupport = ({ headers, onAuthFail }) => {
+  const queryClient = useQueryClient();
+  const { data: messages = [] } = useQuery({
+    queryKey: ["support-messages"],
+    queryFn: async () => {
+      try {
+        return (await axios.get(`${API}/api/admin/support`, { headers })).data;
+      } catch (e) {
+        if (e.response?.status === 401) onAuthFail();
+        return [];
+      }
+    },
+    refetchInterval: 10000,
+  });
+
+  const toggleResolved = async (msg) => {
+    await axios.patch(`${API}/api/admin/support/${msg.id}`, { resolved: !msg.resolved }, { headers });
+    queryClient.invalidateQueries({ queryKey: ["support-messages"] });
+  };
+
+  return (
+    <div className="admin-signups" data-testid="admin-support">
+      {messages.length === 0 && <p className="chat-empty" style={{ padding: 32 }}>No support messages yet.</p>}
+      {messages.map((m) => (
+        <div className="admin-support-row" key={m.id} data-testid={`admin-support-row-${m.id}`}>
+          <div className="admin-support-row-main">
+            <strong>{m.email}</strong>
+            <span className={`order-status-chip ${m.resolved ? "completed" : "processing"}`}>{m.resolved ? "Resolved" : "Open"}</span>
+          </div>
+          <p className="admin-support-message">{m.message}</p>
+          <div className="admin-support-row-foot">
+            <em>{new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</em>
+            <button className="modal-share" data-testid={`admin-support-toggle-${m.id}`} onClick={() => toggleResolved(m)}>
+              {m.resolved ? "Reopen" : "Mark resolved"}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+

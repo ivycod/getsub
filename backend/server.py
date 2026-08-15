@@ -59,6 +59,51 @@ def fire_email(to: str, subject: str, html: str):
     asyncio.create_task(_send_email(to, subject, html))
 
 
+CHAT_NOTIFY_THROTTLE = timedelta(minutes=3)
+
+
+def base_from_request(request: Request) -> str:
+    return request.headers.get("origin", "").rstrip("/")
+
+
+async def maybe_notify_chat(order: dict, recipient: str, text: str, base_url: str):
+    """Email the other party about a new chat message, throttled per-direction to avoid flooding during active chat."""
+    field = "last_notify_admin_at" if recipient == "admin" else "last_notify_buyer_at"
+    now = datetime.now(timezone.utc)
+    last = order.get(field)
+    if last:
+        try:
+            if now - datetime.fromisoformat(last) < CHAT_NOTIFY_THROTTLE:
+                return
+        except Exception:
+            pass
+    await db.orders.update_one({"id": order["id"]}, {"$set": {field: now.isoformat()}})
+    snippet = (text[:140] + "…") if len(text) > 140 else text
+    if recipient == "admin":
+        if not ADMIN_NOTIFY_EMAIL:
+            return
+        fire_email(
+            ADMIN_NOTIFY_EMAIL,
+            f"💬 New buyer message — {order['plan_name']}",
+            email_shell(
+                "New message from a buyer",
+                f"<strong>{order['buyer_email']}</strong> just messaged you about <strong>{order['plan_name']}</strong>:<br/><br/>“{snippet}”<br/><br/>Open the admin panel to reply in the live chat.",
+                "Open admin panel", f"{base_url}/admin" if base_url else "",
+            ),
+        )
+    else:
+        fire_email(
+            order["buyer_email"],
+            f"💬 getsub replied — {order['plan_name']}",
+            email_shell(
+                "You've got a new message",
+                f"Our team just replied on your order <strong>{order['plan_name']}</strong>:<br/><br/>“{snippet}”<br/><br/>Open your private order page to read it and reply.",
+                "Open my order", f"{base_url}/order/{order['access_token']}" if base_url else "",
+            ),
+        )
+
+
+
 def email_shell(title: str, body_html: str, cta_label: str = "", cta_url: str = "") -> str:
     cta = f'<tr><td style="padding:8px 0 20px;"><a href="{cta_url}" style="display:inline-block;background:#0E6E56;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 26px;border-radius:100px;">{cta_label}</a></td></tr>' if cta_url else ""
     return f"""
@@ -403,7 +448,7 @@ async def get_order(access_token: str):
 
 
 @api_router.post("/orders/{access_token}/credentials")
-async def submit_credentials(access_token: str, body: CredentialsSubmit):
+async def submit_credentials(access_token: str, body: CredentialsSubmit, request: Request):
     order = await find_order_by_token(access_token)
     if order["delivery_type"] != "recharge":
         raise HTTPException(status_code=400, detail="This order does not need credentials")
@@ -412,6 +457,17 @@ async def submit_credentials(access_token: str, body: CredentialsSubmit):
         {"$set": {"gmail": body.gmail.strip(), "account_password": body.account_password,
                   "status": "processing", "updated_at": now_iso()}},
     )
+    base = base_from_request(request)
+    if ADMIN_NOTIFY_EMAIL:
+        fire_email(
+            ADMIN_NOTIFY_EMAIL,
+            f"🔑 Credentials submitted — {order['plan_name']}",
+            email_shell(
+                "Buyer submitted account details",
+                f"<strong>{order['buyer_email']}</strong> submitted the account they want upgraded for <strong>{order['plan_name']}</strong>.<br/><br/>Open the admin panel to process it and chat with the buyer.",
+                "Open admin panel", f"{base}/admin" if base else "",
+            ),
+        )
     return {"ok": True}
 
 
@@ -423,12 +479,13 @@ async def get_messages(access_token: str):
 
 
 @api_router.post("/orders/{access_token}/messages")
-async def post_message(access_token: str, body: MessageCreate):
+async def post_message(access_token: str, body: MessageCreate, request: Request):
     order = await find_order_by_token(access_token)
     msg = {"id": str(uuid.uuid4()), "order_id": order["id"], "sender": "buyer",
            "text": body.text.strip(), "created_at": now_iso()}
     await db.messages.insert_one({**msg})
     await db.orders.update_one({"id": order["id"]}, {"$set": {"last_message_at": msg["created_at"], "last_message_sender": "buyer", "updated_at": now_iso()}})
+    await maybe_notify_chat(order, "admin", msg["text"], base_from_request(request))
     return msg
 
 
@@ -446,7 +503,7 @@ async def admin_get_messages(order_id: str, admin: str = Depends(get_admin)):
 
 
 @api_router.post("/admin/orders/{order_id}/messages")
-async def admin_post_message(order_id: str, body: MessageCreate, admin: str = Depends(get_admin)):
+async def admin_post_message(order_id: str, body: MessageCreate, request: Request, admin: str = Depends(get_admin)):
     order = await db.orders.find_one({"id": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -454,6 +511,7 @@ async def admin_post_message(order_id: str, body: MessageCreate, admin: str = De
            "text": body.text.strip(), "created_at": now_iso()}
     await db.messages.insert_one({**msg})
     await db.orders.update_one({"id": order_id}, {"$set": {"last_message_at": msg["created_at"], "last_message_sender": "admin", "updated_at": now_iso()}})
+    await maybe_notify_chat(order, "buyer", msg["text"], base_from_request(request))
     return msg
 
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="0.978" timestamp="2026-08-15T14:49:38.073295+00:00" hostname="agent-env-0c3fd012-03db-4d07-b405-56da0b1a8db2"><testcase classname="tests.backend_test.TestCatalogue" name="test_requested_domain_subs_product_route" time="0.147"><failure message="AssertionError: Review request says /api/products/domain-subs works, but it did not&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/backend_test.py:121: in test_requested_domain_subs_product_route
+    assert response.status_code == 200, "Review request says /api/products/domain-subs works, but it did not"
+E   AssertionError: Review request says /api/products/domain-subs works, but it did not
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="tests.backend_test.TestAdminProductCRUD" name="test_negative_plan_price_is_rejected" time="0.240"><failure message="AssertionError: Negative prices must fail request validation&#10;assert 200 == 422&#10; +  where 200 = &lt;Response [200]&gt;.status_code">backend/tests/backend_test.py:267: in test_negative_plan_price_is_rejected
+    assert response.status_code == 422, "Negative prices must fail request validation"
+E   AssertionError: Negative prices must fail request validation
+E   assert 200 == 422
+E    +  where 200 = &lt;Response [200]&gt;.status_code</failure></testcase><testcase classname="tests.backend_test.TestOrders" name="test_malformed_buyer_email_is_rejected" time="0.047"><failure message="AssertionError: Malformed buyer email was accepted and an order was created&#10;assert 200 in (400, 422)&#10; +  where 200 = &lt;Response [200]&gt;.status_code">backend/tests/backend_test.py:339: in test_malformed_buyer_email_is_rejected
+    assert response.status_code in (400, 422), "Malformed buyer email was accepted and an order was created"
+E   AssertionError: Malformed buyer email was accepted and an order was created
+E   assert 200 in (400, 422)
+E    +  where 200 = &lt;Response [200]&gt;.status_code</failure></testcase><testcase classname="tests.backend_test.TestRechargeWorkflow" name="test_whitespace_only_chat_is_rejected" time="0.141"><failure message="AssertionError: Whitespace-only messages must not be persisted&#10;assert 200 == 422&#10; +  where 200 = &lt;Response [200]&gt;.status_code">backend/tests/backend_test.py:412: in test_whitespace_only_chat_is_rejected
+    assert response.status_code == 422, "Whitespace-only messages must not be persisted"
+E   AssertionError: Whitespace-only messages must not be persisted
+E   assert 200 == 422
+E    +  where 200 = &lt;Response [200]&gt;.status_code</failure></testcase></testsuite></testsuites>

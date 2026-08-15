@@ -121,6 +121,9 @@ const Hero = ({ activeProducts }) => {
                   <ServiceIcon service={p.slug} color={p.color} size={22} />
                 </span>
               ))}
+              <span className="price-logo-item price-logo-more" title="More products coming soon" data-testid="price-card-logo-more">
+                +
+              </span>
             </div>
             <div className="bridge bridge-single">
               <span className="price-from-label">From</span>

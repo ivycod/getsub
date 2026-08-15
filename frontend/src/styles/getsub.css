@@ -140,6 +140,7 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .price-logos{ display:flex; gap:10px; overflow-x:auto; padding-bottom:14px; margin-bottom:8px; scrollbar-width:none; }
 .price-logos::-webkit-scrollbar{ display:none; }
 .price-logo-item{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:11px; background:var(--bg); border:1px solid var(--border); }
+.price-logo-more{ font-size:17px; font-weight:700; color:var(--muted); }
 .bridge{ display:flex; align-items:center; justify-content:center; gap:14px; padding:22px 0 6px; }
 .bridge-single{ gap:8px; padding:10px 0 6px; }
 .price-from-label{ font-size:15px; color:var(--muted); font-weight:600; }

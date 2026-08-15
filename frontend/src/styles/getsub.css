@@ -69,7 +69,17 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 /* Hero mascot */
 .hero-mascot-wrap{ margin-top:34px; }
 .mascot{ display:block; height:auto; user-select:none; -webkit-user-drag:none; }
-.hero-mascot{ width:clamp(280px, 24vw, 350px); filter:drop-shadow(0 22px 30px rgba(18,33,29,0.16)); animation:mascotFloat 5s ease-in-out infinite; transform-origin:bottom center; }
+.hero-mascot{ width:clamp(280px, 24vw, 350px); filter:drop-shadow(0 22px 30px rgba(18,33,29,0.16)); transform-origin:60% 90%; animation:heroWave 1.5s ease-in-out 0.35s both, mascotFloat 5s ease-in-out 1.85s infinite; }
+@keyframes heroWave{
+  0%{ transform:rotate(0deg); }
+  12%{ transform:rotate(-11deg); }
+  28%{ transform:rotate(9deg); }
+  44%{ transform:rotate(-8deg); }
+  60%{ transform:rotate(6deg); }
+  76%{ transform:rotate(-4deg); }
+  90%{ transform:rotate(2deg); }
+  100%{ transform:rotate(0deg); }
+}
 @keyframes mascotFloat{ 0%,100%{ transform:translateY(0) rotate(0deg); } 50%{ transform:translateY(-12px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce){ .hero-mascot{ animation:none; } }
 

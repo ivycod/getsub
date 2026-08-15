@@ -27,6 +27,12 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
+## Implemented (Aug 2026 — hero pricing card update)
+- Replaced hero pricing card's Spotify/YouTube tab toggle with a horizontal scrollable row of product logos (dynamically rendered from active products via ServiceIcon, so future products like Netflix/Grammarly show automatically).
+- Card now shows a single "From $X.XX / month" price (lowest `from_price` across active products) instead of a per-tab strikethrough price.
+- Primary action changed to a "See all plans" button linking to the in-page `#products` section, replacing the implicit tab-driven single-product flow.
+- Seats-left banner, Secure checkout row, and payment icons left unchanged; card styling/position unchanged.
+
 - Fixed testing-agent findings:
   - Backend: `buyer_email`/`gmail` now validated as `EmailStr`; plan/product prices require `ge=0`; chat message text rejects whitespace-only; admin-login brute-force lockout now keys off the last (trusted-proxy-appended) `X-Forwarded-For` entry instead of the client-spoofable first entry.
   - Frontend: Products nav dropdown no longer closes immediately on click (was toggling instead of opening); order-summary rows now wrap/overflow-break long buyer emails on mobile; "How it works" copy no longer falsely claims real Paddle checkout while payments are simulated.

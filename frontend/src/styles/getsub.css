@@ -137,11 +137,19 @@ header{ position:sticky; top:0; z-index:40; background:rgba(246,250,248,0.9); ba
 .tabs{ display:flex; gap:8px; margin-bottom:22px; }
 .tab{ flex:1; text-align:center; padding:9px 6px; border-radius:8px; font-size:13px; font-weight:600; color:var(--ink-soft); background:var(--bg); border:1px solid var(--border); transition:all .2s ease; }
 .tab.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+.price-logos{ display:flex; gap:10px; overflow-x:auto; padding-bottom:14px; margin-bottom:8px; scrollbar-width:none; }
+.price-logos::-webkit-scrollbar{ display:none; }
+.price-logo-item{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:11px; background:var(--bg); border:1px solid var(--border); }
 .bridge{ display:flex; align-items:center; justify-content:center; gap:14px; padding:22px 0 6px; }
+.bridge-single{ gap:8px; padding:10px 0 6px; }
+.price-from-label{ font-size:15px; color:var(--muted); font-weight:600; }
+.price-per-label{ font-size:15px; color:var(--muted); font-weight:600; }
 .price-old{ font-family:'Space Grotesk',sans-serif; font-size:26px; color:var(--strike); text-decoration:line-through; text-decoration-thickness:2px; }
 .arrow{ color:var(--muted); font-size:20px; }
 .price-new{ font-family:'Space Grotesk',sans-serif; font-size:40px; font-weight:700; color:var(--teal); }
 .price-sub{ text-align:center; font-size:13px; color:var(--muted); margin-bottom:20px; }
+.price-card-cta{ display:block; text-align:center; background:var(--ink); color:#fff; font-weight:700; font-size:14px; padding:12px 18px; border-radius:100px; margin-bottom:18px; transition:transform .2s ease, background .2s ease; }
+.price-card-cta:hover{ transform:translateY(-1px); background:var(--teal); }
 .seats{ display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; font-weight:600; color:var(--amber-text); background:var(--amber-tint); padding:8px 12px; border-radius:8px; }
 .seats-dot{ width:7px; height:7px; border-radius:50%; background:var(--amber); animation:pulse 2s infinite; }
 @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }

@@ -53,9 +53,11 @@ const PayRow = ({ dark }) => (
   </div>
 );
 
-const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
+const Hero = ({ activeProducts }) => {
   const { scrollY } = useScroll();
   const cardY = useTransform(scrollY, [0, 400], [0, -40]);
+  const pricedProducts = activeProducts.filter((p) => p.from_price > 0);
+  const lowestPrice = pricedProducts.length ? Math.min(...pricedProducts.map((p) => p.from_price)) : null;
   return (
     <section className="hero">
       <div className="wrap hero-grid">
@@ -113,19 +115,20 @@ const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
         <div className="hero-right">
           <div className="price-chip" data-testid="price-chip"><span className="price-chip-star">★</span> 4.8 · 241+ happy subscribers</div>
           <motion.div className="price-card" style={{ y: cardY }} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="tabs">
-              {["spotify", "youtube"].map((s) => (
-                <button key={s} className={`tab ${heroTab === s ? "active" : ""}`} onClick={() => setHeroTab(s)} data-testid={`hero-tab-${s}`}>
-                  {s === "spotify" ? "Spotify" : "YouTube"}
-                </button>
+            <div className="price-logos" data-testid="price-card-logos">
+              {activeProducts.map((p) => (
+                <span className="price-logo-item" key={p.slug} title={p.name} data-testid={`price-card-logo-${p.slug}`}>
+                  <ServiceIcon service={p.slug} color={p.color} size={22} />
+                </span>
               ))}
             </div>
-            <div className="bridge">
-              <span className="price-old">{heroPrice.old}</span>
-              <span className="arrow">→</span>
-              <span className="price-new">{heroPrice.new}</span>
+            <div className="bridge bridge-single">
+              <span className="price-from-label">From</span>
+              <span className="price-new" data-testid="price-card-lowest">{lowestPrice != null ? money(lowestPrice) : "—"}</span>
+              <span className="price-per-label">/ month</span>
             </div>
-            <p className="price-sub">per month · from</p>
+            <p className="price-sub">across all plans</p>
+            <a href="#products" className="price-card-cta" data-testid="price-card-see-all">See all plans</a>
             <div className="seats"><span className="seats-dot" /> 2 seats left on this cycle</div>
             <PayRow />
           </motion.div>
@@ -231,7 +234,6 @@ const ComingSoonCard = ({ product, delay }) => {
 };
 
 function App() {
-  const [heroTab, setHeroTab] = useState("spotify");
   const [modalPlan, setModalPlan] = useState(null);
   const [quickView, setQuickView] = useState(null);
   const { data: products = [] } = useProducts();
@@ -253,13 +255,11 @@ function App() {
     document.body.style.overflow = modalPlan || quickView ? "hidden" : "";
   }, [modalPlan, quickView]);
 
-  const heroPrices = { spotify: { old: "$12.99", new: "$4.49" }, youtube: { old: "$15.99", new: "$3.49" } };
-
   return (
     <>
       <SiteHeader links={[{ href: "#how", label: "How it works" }]} />
 
-      <Hero heroTab={heroTab} setHeroTab={setHeroTab} heroPrice={heroPrices[heroTab]} />
+      <Hero activeProducts={activeProducts} />
 
       <Marquee />
 

@@ -7,11 +7,13 @@ import { money } from "@/data";
 import "@/styles/getsub.css";
 
 const API = process.env.REACT_APP_BACKEND_URL;
+const ACTIVE_STATUSES = ["awaiting_credentials", "processing"];
 
 export default function AccountPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
+  const [tab, setTab] = useState("active");
 
   useEffect(() => {
     if (user === false) navigate("/login?next=/account", { replace: true });
@@ -23,6 +25,10 @@ export default function AccountPage() {
   }, [user]);
 
   if (!user) return null;
+
+  const activeOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+  const closedOrders = orders.filter((o) => o.status === "completed");
+  const shown = tab === "active" ? activeOrders : closedOrders;
 
   return (
     <div className="legal-page">
@@ -38,12 +44,19 @@ export default function AccountPage() {
           <p style={{ marginBottom: 8 }}><strong>Email:</strong> {user.email}</p>
           <button className="modal-share" data-testid="account-logout" onClick={async () => { await logout(); navigate("/"); }} style={{ marginTop: 4 }}>Log out</button>
         </div>
-        <h3>Your orders</h3>
-        {orders.length === 0 ? (
-          <p className="chat-empty" data-testid="account-no-orders">No orders yet — <Link to="/#products">browse plans</Link>.</p>
+        <h3>My subscriptions</h3>
+        <div className="auth-tabs account-sub-tabs" data-testid="account-sub-tabs">
+          <button type="button" className={`auth-tab ${tab === "active" ? "active" : ""}`} data-testid="account-tab-active" onClick={() => setTab("active")}>Active ({activeOrders.length})</button>
+          <button type="button" className={`auth-tab ${tab === "closed" ? "active" : ""}`} data-testid="account-tab-closed" onClick={() => setTab("closed")}>Closed ({closedOrders.length})</button>
+        </div>
+        {shown.length === 0 ? (
+          <p className="chat-empty" data-testid="account-no-orders">
+            {tab === "active" ? "No active subscriptions — " : "No closed subscriptions yet — "}
+            <Link to="/#products">browse plans</Link>.
+          </p>
         ) : (
           <div className="admin-signups" style={{ padding: 0 }} data-testid="account-orders-list">
-            {orders.map((o) => (
+            {shown.map((o) => (
               <Link className="admin-signup-row" style={{ textDecoration: "none" }} to={`/order/${o.access_token}`} key={o.id} data-testid={`account-order-${o.id}`}>
                 <ServiceIcon service={o.service} size={20} />
                 <strong>{o.plan_name}</strong>
@@ -58,3 +71,4 @@ export default function AccountPage() {
     </div>
   );
 }
+

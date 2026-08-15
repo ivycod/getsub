@@ -27,7 +27,14 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
-## Implemented (Aug 2026 — Buyer accounts, login-gated checkout, real live-chat tickets)
+## Implemented (Aug 2026 — Header redesign: search, My Subscription, language pill, login icon)
+- Moved sign-in control to the far right (after "Get started"), replaced the "Sign in" text link with a circular person/login icon button (→ /login or /account depending on auth state).
+- Added a product search bar in the nav (filters active products by name, dropdown of matches, Enter/click navigates to the product page) — ready to scale as more products are added.
+- Added a "My Subscription" nav link (→ /account).
+- Added a static "EN | USD" language/currency pill (visual placeholder only, not functional yet, per user's choice).
+- /account page now has "Active" (awaiting_credentials + processing) and "Closed" (completed) subscription tabs.
+- Mobile menu updated to match: search input, product links, My Subscription, language pill (login icon stays in the fixed header).
+
 - Fixed reported bug: admin previously could not reply to support tickets. Replaced the one-shot "leave a message" widget with a real ticket system (`tickets` + `ticket_messages` collections); admin Support tab is now a master-detail list with a reply box + open/resolved toggle per ticket.
 - Added buyer accounts: email+password (bcrypt via asyncio.to_thread, JWT access 15min/refresh 7day httpOnly cookies) AND Google sign-in (Emergent-managed OAuth, `/api/auth/google/session`), combined under one unified JWT session so `get_current_buyer` works the same regardless of login method.
 - Checkout now REQUIRES login (guest checkout removed) — `POST /api/orders` derives `buyer_email`/`user_id` from the authenticated buyer; SavingsModal shows a "Sign in to continue" gate (email/password + Google) when logged out.

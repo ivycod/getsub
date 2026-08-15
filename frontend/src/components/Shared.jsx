@@ -94,10 +94,20 @@ export const productChip = (slug, color) => {
 export const SiteHeader = ({ links }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: products = [] } = useProducts();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const activeProducts = products.filter((p) => p.status === "active");
   const items = links || [{ href: "/#how", label: "How it works" }];
+  const searchMatches = searchQuery.trim()
+    ? activeProducts.filter((p) => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : [];
+  const goToSearchResult = (slug) => { setSearchQuery(""); navigate(`/${slug}`); };
+  const submitSearch = (e) => {
+    e.preventDefault();
+    if (searchMatches.length > 0) goToSearchResult(searchMatches[0].slug);
+  };
   const renderLink = (l, onClick) =>
     l.href.startsWith("/") && !l.href.includes("#") ? (
       <Link key={l.label} to={l.href} onClick={onClick}>{l.label}</Link>
@@ -129,12 +139,39 @@ export const SiteHeader = ({ links }) => {
             </AnimatePresence>
           </div>
         </nav>
-        {user ? (
-          <Link to="/account" className="nav-account-link" data-testid="nav-account-link">{user.name?.split(" ")[0] || "Account"}</Link>
-        ) : user === false ? (
-          <Link to="/login" className="nav-account-link" data-testid="nav-signin-link">Sign in</Link>
-        ) : <span />}
-        <a href={items.find((l) => l.cta)?.href || "/#products"} className="nav-cta" data-testid="nav-get-started">Get started</a>
+        <div className="nav-right">
+          <form className="nav-search" role="search" onSubmit={submitSearch} data-testid="nav-search-form">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-search-icon"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input
+              type="text"
+              className="nav-search-input"
+              placeholder="Search products…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="nav-search-input"
+            />
+            <AnimatePresence>
+              {searchQuery.trim() && (
+                <motion.div className="nav-search-results" data-testid="nav-search-results" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}>
+                  {searchMatches.length === 0 ? (
+                    <p className="nav-search-empty" data-testid="nav-search-empty">No products found</p>
+                  ) : searchMatches.map((p) => (
+                    <button type="button" key={p.slug} className="nav-search-result-item" data-testid={`nav-search-result-${p.slug}`} onClick={() => goToSearchResult(p.slug)}>
+                      <ServiceIcon service={p.slug} color={p.color} size={16} />
+                      {p.name}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </form>
+          <Link to={user ? "/account" : "/login?next=/account"} className="nav-account-link" data-testid="nav-subscription-link">My Subscription</Link>
+          <span className="nav-lang-pill" data-testid="nav-lang-pill">EN <span className="nav-lang-sep">|</span> USD</span>
+          <a href={items.find((l) => l.cta)?.href || "/#products"} className="nav-cta" data-testid="nav-get-started">Get started</a>
+          <Link to={user ? "/account" : "/login"} className="nav-login-icon-btn" data-testid="nav-login-icon" aria-label="Account">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+          </Link>
+        </div>
         <button className="menu-btn" data-testid="menu-toggle" aria-label="Open menu" onClick={() => setMobileOpen((v) => !v)}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             {mobileOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" /></>}
@@ -145,15 +182,23 @@ export const SiteHeader = ({ links }) => {
         {mobileOpen && (
           <motion.div className="mobile-menu" data-testid="mobile-menu" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
             <div className="mobile-menu-inner">
+              <form className="nav-search mobile-nav-search" role="search" onSubmit={submitSearch} data-testid="mobile-nav-search-form">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-search-icon"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input
+                  type="text"
+                  className="nav-search-input"
+                  placeholder="Search products…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="mobile-nav-search-input"
+                />
+              </form>
               {items.map((l) => renderLink(l, () => setMobileOpen(false)))}
               {activeProducts.map((p) => (
                 <Link key={p.slug} to={`/${p.slug}`} onClick={() => setMobileOpen(false)}>{p.name}</Link>
               ))}
-              {user ? (
-                <Link to="/account" data-testid="mobile-account-link" onClick={() => setMobileOpen(false)}>My account</Link>
-              ) : user === false ? (
-                <Link to="/login" data-testid="mobile-signin-link" onClick={() => setMobileOpen(false)}>Sign in</Link>
-              ) : null}
+              <Link to={user ? "/account" : "/login?next=/account"} data-testid="mobile-subscription-link" onClick={() => setMobileOpen(false)}>My Subscription</Link>
+              <span className="nav-lang-pill" data-testid="mobile-nav-lang-pill">EN <span className="nav-lang-sep">|</span> USD</span>
             </div>
           </motion.div>
         )}

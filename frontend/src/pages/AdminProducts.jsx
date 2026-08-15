@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { ServiceIcon } from "@/components/Shared";
@@ -247,3 +247,119 @@ export const AdminSignups = ({ headers, onAuthFail }) => {
     </div>
   );
 };
+
+const AdminTicketChat = ({ ticketId, headers }) => {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/api/admin/tickets/${ticketId}/messages`, { headers });
+      setMessages(data);
+    } catch (e) { /* keep polling */ }
+  }, [ticketId, headers]);
+
+  useEffect(() => {
+    setMessages([]);
+    load();
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const send = async (e) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    try {
+      const { data } = await axios.post(`${API}/api/admin/tickets/${ticketId}/messages`, { text: t }, { headers });
+      setMessages((m) => [...m, data]);
+      setText("");
+    } catch (err) { /* keep text so admin can retry */ }
+  };
+
+  return (
+    <div className="chat-box admin-chat" data-testid="admin-ticket-chat-box">
+      <div className="chat-messages">
+        {messages.length === 0 && <p className="chat-empty">No messages yet.</p>}
+        {messages.map((m) => (
+          <div key={m.id} className={`chat-bubble ${m.sender === "admin" ? "mine" : "theirs"}`} data-testid={`admin-ticket-message-${m.sender}`}>
+            <span className="chat-sender">{m.sender === "admin" ? "You" : "Buyer"}</span>
+            {m.text}
+            <span className="chat-time">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+          </div>
+        ))}
+      </div>
+      <form className="chat-input-row" onSubmit={send}>
+        <input className="chat-input" data-testid="admin-ticket-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Reply to the buyer…" maxLength={2000} />
+        <button className="chat-send" data-testid="admin-ticket-send" type="submit" disabled={!text.trim()}>Send</button>
+      </form>
+    </div>
+  );
+};
+
+export const AdminSupport = ({ headers, onAuthFail }) => {
+  const [selected, setSelected] = useState(null);
+  const { data: tickets = [] } = useQuery({
+    queryKey: ["admin-tickets"],
+    queryFn: async () => {
+      try {
+        return (await axios.get(`${API}/api/admin/tickets`, { headers })).data;
+      } catch (e) {
+        if (e.response?.status === 401) onAuthFail();
+        return [];
+      }
+    },
+    refetchInterval: 8000,
+  });
+  const queryClient = useQueryClient();
+
+  const toggleStatus = async (ticket) => {
+    const status = ticket.status === "resolved" ? "open" : "resolved";
+    await axios.patch(`${API}/api/admin/tickets/${ticket.id}`, { status }, { headers });
+    queryClient.invalidateQueries({ queryKey: ["admin-tickets"] });
+    setSelected((s) => (s && s.id === ticket.id ? { ...s, status } : s));
+  };
+
+  return (
+    <div className="admin-grid" data-testid="admin-support">
+      <div className="admin-orders" data-testid="admin-tickets-list">
+        {tickets.length === 0 && <p className="chat-empty" style={{ padding: 20 }}>No support tickets yet.</p>}
+        {tickets.map((t) => (
+          <button
+            key={t.id}
+            className={`admin-order-row ${selected?.id === t.id ? "active" : ""}`}
+            data-testid={`admin-ticket-row-${t.id}`}
+            onClick={() => setSelected(t)}
+          >
+            <span className="admin-order-main">
+              <strong>{t.buyer_email}</strong>
+              <em>{t.last_message_at ? new Date(t.last_message_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "No messages"}</em>
+            </span>
+            <span className={`order-status-chip ${t.status === "resolved" ? "completed" : "processing"}`}>{t.status}</span>
+            {t.last_message_sender === "buyer" && <span className="admin-unread-dot" title="Buyer sent the last message" />}
+          </button>
+        ))}
+      </div>
+      <div className="admin-detail">
+        {!selected ? (
+          <p className="chat-empty" style={{ padding: 32 }}>Select a ticket to reply.</p>
+        ) : (
+          <>
+            <div className="order-summary" data-testid="admin-ticket-detail">
+              <div className="order-summary-row"><span>Buyer</span><strong>{selected.buyer_email}</strong></div>
+              <div className="order-summary-row">
+                <span>Status</span>
+                <button className="modal-share" data-testid={`admin-ticket-toggle-${selected.id}`} onClick={() => toggleStatus(selected)} style={{ width: "auto", padding: "6px 14px", marginTop: 0 }}>
+                  {selected.status === "resolved" ? "Reopen" : "Mark resolved"}
+                </button>
+              </div>
+            </div>
+            <AdminTicketChat ticketId={selected.id} headers={headers} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+

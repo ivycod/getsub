@@ -9,6 +9,12 @@ import "@/styles/getsub.css";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+const PLACEHOLDER_REVIEWS = [
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+  { quote: "Placeholder review text — replace with a real customer quote.", who: "Customer name, city" },
+];
+
 const ROTATE_WORDS = ["YouTube", "Netflix", "Prime Video", "Grammarly", "chat GPT", "Canva"];
 
 const RotatingWord = () => {
@@ -53,9 +59,11 @@ const PayRow = ({ dark }) => (
   </div>
 );
 
-const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
+const Hero = ({ activeProducts }) => {
   const { scrollY } = useScroll();
   const cardY = useTransform(scrollY, [0, 400], [0, -40]);
+  const pricedProducts = activeProducts.filter((p) => p.from_price > 0);
+  const lowestPrice = pricedProducts.length ? Math.min(...pricedProducts.map((p) => p.from_price)) : null;
   return (
     <section className="hero">
       <div className="wrap hero-grid">
@@ -113,19 +121,23 @@ const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
         <div className="hero-right">
           <div className="price-chip" data-testid="price-chip"><span className="price-chip-star">★</span> 4.8 · 241+ happy subscribers</div>
           <motion.div className="price-card" style={{ y: cardY }} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="tabs">
-              {["spotify", "youtube"].map((s) => (
-                <button key={s} className={`tab ${heroTab === s ? "active" : ""}`} onClick={() => setHeroTab(s)} data-testid={`hero-tab-${s}`}>
-                  {s === "spotify" ? "Spotify" : "YouTube"}
-                </button>
+            <div className="price-logos" data-testid="price-card-logos">
+              {activeProducts.map((p) => (
+                <span className="price-logo-item" key={p.slug} title={p.name} data-testid={`price-card-logo-${p.slug}`}>
+                  <ServiceIcon service={p.slug} color={p.color} size={22} />
+                </span>
               ))}
+              <span className="price-logo-item price-logo-more" title="More products coming soon" data-testid="price-card-logo-more">
+                +
+              </span>
             </div>
-            <div className="bridge">
-              <span className="price-old">{heroPrice.old}</span>
-              <span className="arrow">→</span>
-              <span className="price-new">{heroPrice.new}</span>
+            <div className="bridge bridge-single">
+              <span className="price-from-label">From</span>
+              <span className="price-new" data-testid="price-card-lowest">{lowestPrice != null ? money(lowestPrice) : "—"}</span>
+              <span className="price-per-label">/ month</span>
             </div>
-            <p className="price-sub">per month · from</p>
+            <p className="price-sub">across all plans</p>
+            <a href="#products" className="price-card-cta" data-testid="price-card-see-all">See all plans</a>
             <div className="seats"><span className="seats-dot" /> 2 seats left on this cycle</div>
             <PayRow />
           </motion.div>
@@ -231,9 +243,9 @@ const ComingSoonCard = ({ product, delay }) => {
 };
 
 function App() {
-  const [heroTab, setHeroTab] = useState("spotify");
   const [modalPlan, setModalPlan] = useState(null);
   const [quickView, setQuickView] = useState(null);
+  const [openFaq, setOpenFaq] = useState("0-0");
   const { data: products = [] } = useProducts();
   useLenis();
 
@@ -253,13 +265,11 @@ function App() {
     document.body.style.overflow = modalPlan || quickView ? "hidden" : "";
   }, [modalPlan, quickView]);
 
-  const heroPrices = { spotify: { old: "$12.99", new: "$4.49" }, youtube: { old: "$15.99", new: "$3.49" } };
-
   return (
     <>
-      <SiteHeader links={[{ href: "#how", label: "How it works" }]} />
+      <SiteHeader links={[{ href: "#how", label: "How it works" }, { href: "#reviews", label: "Reviews" }, { href: "#faq", label: "FAQ" }]} />
 
-      <Hero heroTab={heroTab} setHeroTab={setHeroTab} heroPrice={heroPrices[heroTab]} />
+      <Hero activeProducts={activeProducts} />
 
       <Marquee />
 
@@ -322,7 +332,7 @@ function App() {
           <div className="steps">
             {[
               ["Pick your seat", "Choose a service and see the official price next to yours, upfront."],
-              ["Pay securely", "Checkout runs through Paddle. Your card details never touch us directly."],
+              ["Confirm your order", "One quick step to lock in your price — no card details stored by us."],
               ["Get access", "You're added to the plan the same day, with your own login."],
             ].map(([t, d], i) => (
               <Reveal className="step" key={t} delay={i * 0.1}>
@@ -334,6 +344,68 @@ function App() {
           </div>
         </div>
       </div>
+
+      <section className="block" id="reviews" data-testid="reviews-section">
+        <div className="wrap">
+          <Reveal className="block-head">
+            <span className="chapter">03 — Reviews</span>
+            <h2>What buyers say</h2>
+            <p>Real reviews go here once you have them — synced from Trustpilot and manual submissions.</p>
+          </Reveal>
+          <div className="hero-proof" style={{ justifyContent: "center", marginBottom: 28 }}>
+            <span className="tp-badge" data-testid="reviews-trustpilot-badge" title="Trustpilot reviews coming soon">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="#00B67A" aria-hidden="true"><path d="M12 1.5 14.8 9h7.7l-6.2 4.7 2.4 7.8L12 16.7l-6.7 4.8 2.4-7.8L1.5 9h7.7z"/></svg>
+              Review us on Trustpilot
+            </span>
+          </div>
+          <div className="testimonial-grid" data-testid="reviews-grid">
+            {PLACEHOLDER_REVIEWS.map((r, i) => (
+              <Reveal className="testimonial" key={i} delay={i * 0.08} data-testid={`review-card-${i}`}>
+                <div className="stars">★★★★★</div>
+                <p className="quote">"{r.quote}"</p>
+                <p className="who">{r.who}</p>
+              </Reveal>
+            ))}
+          </div>
+          <div className="placeholder-note-wrap"><span className="placeholder-note">These are placeholders — swapped for real Trustpilot + manual reviews once available.</span></div>
+        </div>
+      </section>
+
+      <section className="block" id="faq" data-testid="faq-section">
+        <div className="wrap">
+          <Reveal className="block-head">
+            <span className="chapter">04 — FAQ</span>
+            <h2>Frequently asked questions</h2>
+            <p>The same answers you'll find on each product page, all in one place.</p>
+          </Reveal>
+          {activeProducts.map((p, gi) => (
+            p.faqs?.length > 0 && (
+              <div key={p.slug} style={{ marginBottom: 32 }}>
+                <h3 className="faq-group-title" data-testid={`faq-group-${p.slug}`}>{p.name}</h3>
+                <div className="faq">
+                  {p.faqs.map((f, i) => {
+                    const key = `${gi}-${i}`;
+                    return (
+                      <div className={`faq-item ${openFaq === key ? "open" : ""}`} key={key}>
+                        <button className="faq-q" onClick={() => setOpenFaq(openFaq === key ? "" : key)} data-testid={`faq-${p.slug}-${i}`}>
+                          {f.q}<span className="faq-icon">+</span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {openFaq === key && (
+                            <motion.div className="faq-a" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+                              <div className="faq-a-inner">{f.a}</div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      </section>
 
       <Reveal className="footer-cta">
         <h2>Ready to stop overpaying?</h2>

@@ -216,3 +216,104 @@ def test_admin_notify_signups(s, admin_headers):
     assert r.status_code == 200
     emails = [x["email"] for x in r.json()]
     assert "test_notify@example.com" in emails
+
+
+# ------- Buyer auth (merged branch) -------
+BUYER_EMAIL = "buyer1@test.com"
+BUYER_PASSWORD = "pass12345"
+
+
+@pytest.fixture(scope="session")
+def buyer_session():
+    """Session with httpOnly cookies for buyer1@test.com. Creates account if missing."""
+    sess = requests.Session()
+    # Try login first
+    r = sess.post(f"{API}/auth/login", json={"email": BUYER_EMAIL, "password": BUYER_PASSWORD})
+    if r.status_code != 200:
+        # Register
+        r = sess.post(f"{API}/auth/register", json={"email": BUYER_EMAIL, "password": BUYER_PASSWORD, "name": "Buyer One"})
+        assert r.status_code == 200, f"buyer register failed: {r.status_code} {r.text}"
+    return sess
+
+
+def test_auth_register_duplicate_or_login(buyer_session):
+    # buyer_session already created — a fresh register should fail with 400
+    r = requests.post(f"{API}/auth/register", json={"email": BUYER_EMAIL, "password": BUYER_PASSWORD, "name": "Dup"})
+    assert r.status_code == 400
+
+
+def test_auth_me_returns_user(buyer_session):
+    r = buyer_session.get(f"{API}/auth/me")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["email"] == BUYER_EMAIL
+    assert "password_hash" not in d
+
+
+def test_auth_login_wrong_password():
+    r = requests.post(f"{API}/auth/login", json={"email": BUYER_EMAIL, "password": "wrong-password-xx"})
+    assert r.status_code in (401, 429)
+
+
+def test_auth_me_unauthenticated():
+    r = requests.get(f"{API}/auth/me")
+    assert r.status_code == 401
+
+
+def test_google_session_bad_session_id():
+    r = requests.post(f"{API}/auth/google/session", json={"session_id": "invalid-session-id-xyz"})
+    assert r.status_code == 401
+
+
+# ------- Support tickets (buyer + admin) -------
+def test_buyer_tickets_empty_initially(buyer_session):
+    # Fresh buyer may or may not have ticket yet; endpoint should return list (possibly [])
+    r = buyer_session.get(f"{API}/tickets/mine/messages")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_buyer_tickets_requires_auth():
+    r = requests.get(f"{API}/tickets/mine/messages")
+    assert r.status_code == 401
+
+
+def test_buyer_send_ticket_message(buyer_session):
+    r = buyer_session.post(f"{API}/tickets/mine/messages", json={"text": "TEST support hello"})
+    assert r.status_code == 200, r.text
+    msg = r.json()
+    assert msg["sender"] == "buyer"
+    assert msg["text"] == "TEST support hello"
+
+    # verify GET returns it
+    r = buyer_session.get(f"{API}/tickets/mine/messages")
+    assert r.status_code == 200
+    assert any(m["text"] == "TEST support hello" for m in r.json())
+
+
+def test_admin_lists_ticket(s, admin_headers, buyer_session):
+    r = s.get(f"{API}/admin/tickets", headers=admin_headers)
+    assert r.status_code == 200
+    tickets = r.json()
+    assert any(t.get("buyer_email") == BUYER_EMAIL for t in tickets)
+
+
+def test_admin_reply_to_ticket(s, admin_headers, buyer_session):
+    r = s.get(f"{API}/admin/tickets", headers=admin_headers)
+    ticket = next(t for t in r.json() if t.get("buyer_email") == BUYER_EMAIL)
+    tid = ticket["id"]
+    r = s.post(f"{API}/admin/tickets/{tid}/messages", json={"text": "TEST admin reply"}, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["sender"] == "admin"
+
+    # buyer sees it
+    r = buyer_session.get(f"{API}/tickets/mine/messages")
+    assert any(m["text"] == "TEST admin reply" and m["sender"] == "admin" for m in r.json())
+
+
+def test_auth_logout(buyer_session):
+    r = buyer_session.post(f"{API}/auth/logout")
+    assert r.status_code == 200
+    # after logout, me should be 401 (cookies cleared on same session)
+    r = buyer_session.get(f"{API}/auth/me")
+    assert r.status_code == 401

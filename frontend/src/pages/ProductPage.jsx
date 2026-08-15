@@ -11,7 +11,7 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 const HOW_STEPS = [
   ["Pick your plan", "Choose the plan that fits and see the official price next to yours, upfront."],
-  ["Pay securely", "Checkout runs through Paddle. Your card details never touch us directly."],
+  ["Confirm your order", "One quick step to lock in your price — no card details stored by us."],
   ["Get access", "You're added the same day, with your own login delivered by email."],
 ];
 

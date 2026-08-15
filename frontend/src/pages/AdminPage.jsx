@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { ServiceIcon } from "@/components/Shared";
-import { AdminProducts, AdminSignups } from "@/pages/AdminProducts";
+import { AdminProducts, AdminSignups, AdminSupport } from "@/pages/AdminProducts";
 import { money } from "@/data";
 import "@/styles/getsub.css";
 
@@ -134,7 +134,7 @@ export default function AdminPage() {
       <div className="admin-topbar">
         <img src="/getsub-logo.png" alt="getsub" className="logo-img" style={{ height: 28 }} />
         <div className="admin-tabs">
-          {[["orders", "Orders"], ["products", "Products"], ["signups", "Notify signups"]].map(([v, l]) => (
+          {[["orders", "Orders"], ["products", "Products"], ["signups", "Notify signups"], ["support", "Support"]].map(([v, l]) => (
             <button key={v} className={`admin-tab ${tab === v ? "active" : ""}`} data-testid={`admin-tab-${v}`} onClick={() => setTab(v)}>{l}</button>
           ))}
         </div>
@@ -142,6 +142,7 @@ export default function AdminPage() {
       </div>
       {tab === "products" && <AdminProducts headers={headers} onAuthFail={logout} />}
       {tab === "signups" && <AdminSignups headers={headers} onAuthFail={logout} />}
+      {tab === "support" && <AdminSupport headers={headers} onAuthFail={logout} />}
       {tab === "orders" && (
       <div className="admin-grid">
         <div className="admin-orders" data-testid="admin-orders-list">

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Lenis from "lenis";
 import { openCheckout } from "@/paddle";
 import { DELIVERY_OPTIONS, money } from "@/data";
+import { useAuth } from "@/context/AuthContext";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -92,10 +93,22 @@ export const productChip = (slug, color) => {
 
 export const SiteHeader = ({ links }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [dropOpen, setDropOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const { data: products = [] } = useProducts();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const activeProducts = products.filter((p) => p.status === "active");
   const items = links || [{ href: "/#how", label: "How it works" }];
+  const searchMatches = searchQuery.trim()
+    ? activeProducts.filter((p) => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : activeProducts;
+  const showSearchResults = searchFocused || searchQuery.trim().length > 0;
+  const goToSearchResult = (slug) => { setSearchQuery(""); setSearchFocused(false); navigate(`/${slug}`); };
+  const submitSearch = (e) => {
+    e.preventDefault();
+    if (searchMatches.length > 0) goToSearchResult(searchMatches[0].slug);
+  };
   const renderLink = (l, onClick) =>
     l.href.startsWith("/") && !l.href.includes("#") ? (
       <Link key={l.label} to={l.href} onClick={onClick}>{l.label}</Link>
@@ -108,26 +121,42 @@ export const SiteHeader = ({ links }) => {
         <Link to="/" data-testid="nav-logo"><img src="/getsub-logo.png" alt="getsub" className="logo-img" /></Link>
         <nav className="nav-links">
           {items.map((l) => renderLink(l))}
-          <div className="nav-drop" onMouseEnter={() => setDropOpen(true)} onMouseLeave={() => setDropOpen(false)}>
-            <button className="nav-drop-btn" data-testid="nav-products-dropdown" onClick={() => setDropOpen((v) => !v)}>
-              Products
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dropOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }}><path d="M6 9l6 6 6-6" /></svg>
-            </button>
+        </nav>
+        <div className="nav-right">
+          <form className="nav-search" role="search" onSubmit={submitSearch} data-testid="nav-search-form">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-search-icon"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input
+              type="text"
+              className="nav-search-input"
+              placeholder="Search products…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              data-testid="nav-search-input"
+            />
             <AnimatePresence>
-              {dropOpen && (
-                <motion.div className="nav-drop-panel" data-testid="nav-products-panel" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.18 }}>
-                  {activeProducts.map((p) => (
-                    <Link key={p.slug} to={`/${p.slug}`} className="nav-drop-item" data-testid={`nav-drop-${p.slug}`} onClick={() => setDropOpen(false)}>
-                      <ServiceIcon service={p.slug} color={p.color} size={17} />
+              {showSearchResults && (
+                <motion.div className="nav-search-results" data-testid="nav-search-results" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}>
+                  {searchMatches.length === 0 ? (
+                    <p className="nav-search-empty" data-testid="nav-search-empty">No products found</p>
+                  ) : searchMatches.map((p) => (
+                    <button type="button" key={p.slug} className="nav-search-result-item" data-testid={`nav-search-result-${p.slug}`} onClick={() => goToSearchResult(p.slug)}>
+                      <ServiceIcon service={p.slug} color={p.color} size={16} />
                       {p.name}
-                    </Link>
+                    </button>
                   ))}
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        </nav>
-        <a href={items.find((l) => l.cta)?.href || "/#products"} className="nav-cta" data-testid="nav-get-started">Get started</a>
+          </form>
+          <Link to={user ? "/account" : "/login?next=/account"} className="nav-account-link" data-testid="nav-subscription-link">My Subscription</Link>
+          <span className="nav-lang-pill" data-testid="nav-lang-pill">EN <span className="nav-lang-sep">|</span> USD</span>
+          <a href={items.find((l) => l.cta)?.href || "/#products"} className="nav-cta" data-testid="nav-get-started">Get started</a>
+          <Link to={user ? "/account" : "/login"} className="nav-login-icon-btn" data-testid="nav-login-icon" aria-label="Account">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+          </Link>
+        </div>
         <button className="menu-btn" data-testid="menu-toggle" aria-label="Open menu" onClick={() => setMobileOpen((v) => !v)}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             {mobileOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" /></>}
@@ -138,10 +167,23 @@ export const SiteHeader = ({ links }) => {
         {mobileOpen && (
           <motion.div className="mobile-menu" data-testid="mobile-menu" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
             <div className="mobile-menu-inner">
+              <form className="nav-search mobile-nav-search" role="search" onSubmit={submitSearch} data-testid="mobile-nav-search-form">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="nav-search-icon"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input
+                  type="text"
+                  className="nav-search-input"
+                  placeholder="Search products…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="mobile-nav-search-input"
+                />
+              </form>
               {items.map((l) => renderLink(l, () => setMobileOpen(false)))}
               {activeProducts.map((p) => (
                 <Link key={p.slug} to={`/${p.slug}`} onClick={() => setMobileOpen(false)}>{p.name}</Link>
               ))}
+              <Link to={user ? "/account" : "/login?next=/account"} data-testid="mobile-subscription-link" onClick={() => setMobileOpen(false)}>My Subscription</Link>
+              <span className="nav-lang-pill" data-testid="mobile-nav-lang-pill">EN <span className="nav-lang-sep">|</span> USD</span>
             </div>
           </motion.div>
         )}
@@ -171,9 +213,9 @@ export const SiteFooter = () => (
 
 export const SavingsModal = ({ product, plan, months = 1, delivery = null, onChangeDelivery, onClose }) => {
   const navigate = useNavigate();
+  const { user, loginWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [buyerEmail, setBuyerEmail] = useState("");
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -190,12 +232,9 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
   const billing = isShared ? `One-time · ${months} months of access` : plan.billing;
   const chip = productChip(product.slug, product.color);
   const deliveryMeta = !isShared && delivery ? DELIVERY_OPTIONS[delivery] : null;
+  const nextPath = `${window.location.pathname}?plan=${plan.plan_id}`;
 
   const handleCheckout = async () => {
-    if (!buyerEmail.includes("@") || buyerEmail.length < 5) {
-      setError("Enter your email — we'll send your order link there.");
-      return;
-    }
     setLoading(true);
     setError("");
     const res = await openCheckout(plan.plan_id, qty);
@@ -205,8 +244,7 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
         plan_id: plan.plan_id,
         delivery_type: isShared ? "shared" : delivery || "preplanned",
         months: isShared ? months : 1,
-        buyer_email: buyerEmail,
-      });
+      }, { withCredentials: true });
       navigate(`/order/${data.access_token}`);
     } catch (e) {
       setError("Could not create your order. Please try again.");
@@ -218,6 +256,7 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
     <motion.div
       className="modal-overlay"
       data-testid="savings-modal"
+      data-lenis-prevent
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -276,22 +315,25 @@ export const SavingsModal = ({ product, plan, months = 1, delivery = null, onCha
         )}
 
         <div className="modal-actions">
-          <label className="modal-email-label" htmlFor="buyer-email">Your email — order link & confirmation go here</label>
-          <input
-            id="buyer-email"
-            className="cred-input"
-            data-testid="modal-buyer-email"
-            type="email"
-            required
-            placeholder="you@email.com"
-            value={buyerEmail}
-            onChange={(e) => setBuyerEmail(e.target.value)}
-            style={{ marginBottom: 10 }}
-          />
-          {error && <p className="modal-error" data-testid="modal-error">{error}</p>}
-          <button className="modal-cta" data-testid="modal-checkout" onClick={handleCheckout} disabled={loading}>
-            {loading ? "Creating your order…" : "Continue with this plan"}
-          </button>
+          {user ? (
+            <>
+              <p className="modal-signed-in-as" data-testid="modal-signed-in-as">Signed in as <strong>{user.email}</strong></p>
+              {error && <p className="modal-error" data-testid="modal-error">{error}</p>}
+              <button className="modal-cta" data-testid="modal-checkout" onClick={handleCheckout} disabled={loading}>
+                {loading ? "Creating your order…" : "Continue with this plan"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="modal-signed-in-as" data-testid="modal-login-required">Sign in to complete your purchase — your orders and chats are saved to your account.</p>
+              <Link className="modal-cta" data-testid="modal-go-login" to={`/login?next=${encodeURIComponent(nextPath)}`} style={{ display: "block" }}>
+                Sign in to continue
+              </Link>
+              <button type="button" className="modal-share" data-testid="modal-google-login" onClick={() => loginWithGoogle(nextPath)} style={{ marginTop: 8 }}>
+                Continue with Google
+              </button>
+            </>
+          )}
           <p className="modal-fineprint">One-time payment · secure Paddle checkout · same-day activation</p>
         </div>
       </motion.div>
@@ -313,6 +355,7 @@ export const DeliveryChoiceModal = ({ product, plan, onSelect, onClose }) => {
     <motion.div
       className="modal-overlay"
       data-testid="delivery-choice-modal"
+      data-lenis-prevent
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

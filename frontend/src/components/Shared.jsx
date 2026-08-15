@@ -93,8 +93,8 @@ export const productChip = (slug, color) => {
 
 export const SiteHeader = ({ links }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [dropOpen, setDropOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const { data: products = [] } = useProducts();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -102,8 +102,9 @@ export const SiteHeader = ({ links }) => {
   const items = links || [{ href: "/#how", label: "How it works" }];
   const searchMatches = searchQuery.trim()
     ? activeProducts.filter((p) => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-    : [];
-  const goToSearchResult = (slug) => { setSearchQuery(""); navigate(`/${slug}`); };
+    : activeProducts;
+  const showSearchResults = searchFocused || searchQuery.trim().length > 0;
+  const goToSearchResult = (slug) => { setSearchQuery(""); setSearchFocused(false); navigate(`/${slug}`); };
   const submitSearch = (e) => {
     e.preventDefault();
     if (searchMatches.length > 0) goToSearchResult(searchMatches[0].slug);
@@ -120,24 +121,6 @@ export const SiteHeader = ({ links }) => {
         <Link to="/" data-testid="nav-logo"><img src="/getsub-logo.png" alt="getsub" className="logo-img" /></Link>
         <nav className="nav-links">
           {items.map((l) => renderLink(l))}
-          <div className="nav-drop" onMouseEnter={() => setDropOpen(true)} onMouseLeave={() => setDropOpen(false)}>
-            <button className="nav-drop-btn" data-testid="nav-products-dropdown" onClick={() => setDropOpen(true)}>
-              Products
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dropOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }}><path d="M6 9l6 6 6-6" /></svg>
-            </button>
-            <AnimatePresence>
-              {dropOpen && (
-                <motion.div className="nav-drop-panel" data-testid="nav-products-panel" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.18 }}>
-                  {activeProducts.map((p) => (
-                    <Link key={p.slug} to={`/${p.slug}`} className="nav-drop-item" data-testid={`nav-drop-${p.slug}`} onClick={() => setDropOpen(false)}>
-                      <ServiceIcon service={p.slug} color={p.color} size={17} />
-                      {p.name}
-                    </Link>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </nav>
         <div className="nav-right">
           <form className="nav-search" role="search" onSubmit={submitSearch} data-testid="nav-search-form">
@@ -148,10 +131,12 @@ export const SiteHeader = ({ links }) => {
               placeholder="Search products…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               data-testid="nav-search-input"
             />
             <AnimatePresence>
-              {searchQuery.trim() && (
+              {showSearchResults && (
                 <motion.div className="nav-search-results" data-testid="nav-search-results" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.15 }}>
                   {searchMatches.length === 0 ? (
                     <p className="nav-search-empty" data-testid="nav-search-empty">No products found</p>

@@ -27,7 +27,10 @@ Clone https://github.com/ivycod/getsub into this environment. getsub is a subscr
 - Cloned repo, wired backend/frontend deps (removed unused `emergentintegrations`/`litellm` from requirements.txt — caused pip conflicts, not used by this app).
 - Fresh `JWT_SECRET` + `ADMIN_PASSWORD=admin-getsub-2026` generated in backend/.env (gitignored, not in repo).
 - Verified end-to-end: homepage, product pages, plan/delivery/savings modals, simulated checkout → order page, credentials + live chat, admin login/orders/products/notify-signups — all functional (testing agent: 86.7% backend / 91.7% frontend on first pass, mocked payment/email correctly excluded as non-bugs).
-## Implemented (Aug 2026 — Header redesign: search, My Subscription, language pill, login icon)
+## Implemented (Aug 2026 — Header decongestion)
+- Removed the separate "Products" dropdown nav button (products are now only reachable via the search bar and product pages/footer) to reduce nav clutter.
+- Search bar now shows all active products immediately on focus/click (not just when typing), then narrows as the buyer types.
+
 - Moved sign-in control to the far right (after "Get started"), replaced the "Sign in" text link with a circular person/login icon button (→ /login or /account depending on auth state).
 - Added a product search bar in the nav (filters active products by name, dropdown of matches, Enter/click navigates to the product page) — ready to scale as more products are added.
 - Added a "My Subscription" nav link (→ /account).

@@ -100,7 +100,7 @@ const Hero = ({ heroTab, setHeroTab, heroPrice }) => {
               <Mascot pose="wave" className="hero-mascot" eager alt="getsub mascot waving hello" />
             </div>
             <div className="mascot-bubble" data-testid="mascot-bubble">
-              <span className="mascot-bubble-name">Hey, I'm Splitzy</span> — I split the bill, not the vibe.
+              <span className="mascot-bubble-name">Hey, I'm subby</span> — I do one thing: cut your bill in half.
             </div>
           </div>
           <div className="hero-mini-features" data-testid="hero-mini-features">
